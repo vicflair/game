@@ -144,12 +144,16 @@ function createLeafMesh(golden = false) {
   return g;
 }
 
-function spawnLeaf() {
+const LEAF_COUNT = 30;
+
+// staggered: true on init so leaves start at random heights, not all at the top
+function spawnLeaf(staggered = false) {
   const leaf = createLeafMesh(false);
+  const startY = staggered ? Math.random() * 14 : 14;
   leaf.position.set(
-    puppy.position.x + (Math.random() - 0.5) * 22,
-    14,
-    puppy.position.z + (Math.random() - 0.5) * 22
+    puppy.position.x + (Math.random() - 0.5) * 26,
+    startY,
+    puppy.position.z + (Math.random() - 0.5) * 26
   );
   leaf.userData = {
     swayOffset: Math.random() * Math.PI * 2,
@@ -160,7 +164,7 @@ function spawnLeaf() {
   return leaf;
 }
 
-let leaf = spawnLeaf();
+const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
 
 // --- Score ---
 let score = 0;
@@ -234,29 +238,33 @@ function animate() {
   camera.position.copy(camPos);
   camera.lookAt(puppy.position.x, puppy.position.y + 1, puppy.position.z);
 
-  // Leaf fall
-  const d = leaf.userData;
-  leaf.position.y -= d.fallSpeed;
-  leaf.position.x += Math.sin(t * d.swaySpeed + d.swayOffset) * 0.025;
-  leaf.rotation.y += 0.025;
-  leaf.rotation.z  = Math.sin(t * d.swaySpeed + d.swayOffset) * 0.35;
+  // Leaf canopy — update all 30 leaves
+  for (let i = leaves.length - 1; i >= 0; i--) {
+    const l = leaves[i];
+    const d = l.userData;
 
-  // Reset if it hits the ground
-  if (leaf.position.y < 0) {
-    scene.remove(leaf);
-    leaf = spawnLeaf();
-  }
+    l.position.y -= d.fallSpeed;
+    l.position.x += Math.sin(t * d.swaySpeed + d.swayOffset) * 0.025;
+    l.rotation.y += 0.025;
+    l.rotation.z  = Math.sin(t * d.swaySpeed + d.swayOffset) * 0.35;
 
-  // Collision: simple distance check
-  const dx = puppy.position.x - leaf.position.x;
-  const dy = puppy.position.y - leaf.position.y;
-  const dz = puppy.position.z - leaf.position.z;
-  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  if (dist < PUPPY_RADIUS + 0.4) {
-    scene.remove(leaf);
-    leaf = spawnLeaf();
-    score++;
-    scoreEl.innerText = score;
+    // Respawn at top if it hits the ground
+    if (l.position.y < 0) {
+      scene.remove(l);
+      leaves[i] = spawnLeaf(false);
+      continue;
+    }
+
+    // Collision
+    const dx = puppy.position.x - l.position.x;
+    const dy = puppy.position.y - l.position.y;
+    const dz = puppy.position.z - l.position.z;
+    if (Math.sqrt(dx * dx + dy * dy + dz * dz) < PUPPY_RADIUS + 0.4) {
+      scene.remove(l);
+      leaves[i] = spawnLeaf(false);
+      score++;
+      scoreEl.innerText = score;
+    }
   }
 
   renderer.render(scene, camera);
