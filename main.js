@@ -427,20 +427,47 @@ let velZ = 0;
 
 // --- Bark ---
 function bark() {
-  initMusic(); // ensure audio context exists
+  initMusic();
   if (!musicCtx) return;
   const now = musicCtx.currentTime;
+
+  // White noise burst — the "wh" breathiness of a bark
+  const bufLen = musicCtx.sampleRate * 0.3;
+  const buf = musicCtx.createBuffer(1, bufLen, musicCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+  const noise = musicCtx.createBufferSource();
+  noise.buffer = buf;
+
+  // Bandpass sweeps 900 → 180 Hz (sharp attack, opens up like "woof")
+  const bp = musicCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 3;
+  bp.frequency.setValueAtTime(900, now);
+  bp.frequency.exponentialRampToValueAtTime(180, now + 0.18);
+
+  const noiseGain = musicCtx.createGain();
+  noiseGain.gain.setValueAtTime(1.0, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+  noise.connect(bp);
+  bp.connect(noiseGain);
+  noiseGain.connect(musicCtx.destination);
+
+  // Low square wave for the chest/throat "oof" body
   const osc = musicCtx.createOscillator();
-  const g = musicCtx.createGain();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(360, now);
-  osc.frequency.exponentialRampToValueAtTime(75, now + 0.18);
-  g.gain.setValueAtTime(0.55, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-  osc.connect(g);
-  g.connect(musicCtx.destination);
-  osc.start(now);
-  osc.stop(now + 0.25);
+  const oscGain = musicCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(200, now);
+  osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+  oscGain.gain.setValueAtTime(0, now);
+  oscGain.gain.linearRampToValueAtTime(0.35, now + 0.03);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+  osc.connect(oscGain);
+  oscGain.connect(musicCtx.destination);
+
+  noise.start(now); noise.stop(now + 0.3);
+  osc.start(now);   osc.stop(now + 0.25);
 }
 
 // --- Music ---
