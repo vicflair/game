@@ -200,8 +200,14 @@ window.addEventListener('keyup',   e => { keys[e.key] = false; });
 
 const MOVE_SPEED = 0.12;
 const ROT_SPEED  = 0.045;
-let velY = 0;
+let velY  = 0;
+let velX  = 0;
+let velZ  = 0;
 let onGround = true;
+const GRAVITY       = 0.009;
+const JUMP_FORCE    = 0.16;
+const AIR_CONTROL   = 0.08;
+const GROUND_DRAG   = 0.75;
 
 // --- Game loop ---
 let t = 0;
@@ -215,27 +221,48 @@ function animate() {
   if (keys['ArrowLeft']  || keys['a']) puppy.rotation.y += ROT_SPEED;
   if (keys['ArrowRight'] || keys['d']) puppy.rotation.y -= ROT_SPEED;
 
-  // Forward / back
+  // Forward / back — on ground: direct control; in air: gentle steering
   const moving = keys['ArrowUp'] || keys['w'] || keys['ArrowDown'] || keys['s'];
-  if (keys['ArrowUp']   || keys['w']) {
-    puppy.position.x -= Math.sin(puppy.rotation.y) * MOVE_SPEED;
-    puppy.position.z -= Math.cos(puppy.rotation.y) * MOVE_SPEED;
+  if (onGround) {
+    velX = 0; velZ = 0;
+    if (keys['ArrowUp']   || keys['w']) {
+      velX = -Math.sin(puppy.rotation.y) * MOVE_SPEED;
+      velZ = -Math.cos(puppy.rotation.y) * MOVE_SPEED;
+    }
+    if (keys['ArrowDown'] || keys['s']) {
+      velX = Math.sin(puppy.rotation.y) * MOVE_SPEED;
+      velZ = Math.cos(puppy.rotation.y) * MOVE_SPEED;
+    }
+  } else {
+    // air steering: nudge velocity toward intended direction
+    if (keys['ArrowUp']   || keys['w']) {
+      velX += -Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
+      velZ += -Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
+    }
+    if (keys['ArrowDown'] || keys['s']) {
+      velX += Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
+      velZ += Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
+    }
+    // cap air speed
+    const spd = Math.sqrt(velX * velX + velZ * velZ);
+    if (spd > MOVE_SPEED * 1.8) { velX *= MOVE_SPEED * 1.8 / spd; velZ *= MOVE_SPEED * 1.8 / spd; }
   }
-  if (keys['ArrowDown'] || keys['s']) {
-    puppy.position.x += Math.sin(puppy.rotation.y) * MOVE_SPEED;
-    puppy.position.z += Math.cos(puppy.rotation.y) * MOVE_SPEED;
-  }
+  puppy.position.x += velX;
+  puppy.position.z += velZ;
 
-  // Jump
-  if ((keys[' ']) && onGround) {
-    velY = 0.2;
+  // Jump — carry current ground velocity into the air
+  if (keys[' '] && onGround) {
+    velY = JUMP_FORCE;
     onGround = false;
   }
-  velY -= 0.013;
+  velY -= GRAVITY;
   puppy.position.y += velY;
   if (puppy.position.y <= 0.75) {
     puppy.position.y = 0.75;
     velY = 0;
+    // bleed off horizontal momentum on landing
+    velX *= GROUND_DRAG;
+    velZ *= GROUND_DRAG;
     onGround = true;
   }
 
