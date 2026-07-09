@@ -50,7 +50,10 @@ scene.add(ground);
 // A few static trees for depth — varied sizes for a natural feel
 const TREE_COLORS = [0xe8724a, 0xc1663a, 0xe8a030, 0xd4522a, 0x8b9e5a, 0xcc7722];
 
+const treePositions = [];
+
 function makeTree(x, z, scale = 1) {
+  treePositions.push({ x, z });
   const g = new THREE.Group();
   const trunkH = 4.0 * scale;
   const trunk = withOutline(new THREE.Mesh(new THREE.CylinderGeometry(0.28 * scale, 0.42 * scale, trunkH, 8), toonMat(0x5d3a1a)));
@@ -152,6 +155,68 @@ const npcDogs = NPC_CONFIGS.map(({ body, dark, snout }) => {
   mesh.position.set((Math.random() - 0.5) * 16, 0.75, (Math.random() - 0.5) * 16);
   scene.add(mesh);
   return { mesh, target: newRoamTarget(), speed: 0.05 + Math.random() * 0.025, pauseTimer: 0 };
+});
+
+// --- Squirrels ---
+function createSquirrelMesh() {
+  const GREY   = 0x8a7060;
+  const FLUFFY = 0xc4a882;
+  const outer = new THREE.Group();
+  const g = new THREE.Group();
+  g.rotation.y = Math.PI / 2;
+  outer.add(g);
+
+  const body = withOutline(new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.25, 8, 8), toonMat(GREY)));
+  body.rotation.z = Math.PI / 2;
+  g.add(body);
+
+  const head = withOutline(new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), toonMat(GREY)));
+  head.position.set(0.32, 0.1, 0);
+  g.add(head);
+
+  // Pointy ears
+  [-0.07, 0.07].forEach(z => {
+    const ear = withOutline(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.04), toonMat(GREY)));
+    ear.position.set(0.3, 0.24, z);
+    g.add(ear);
+  });
+
+  // Big fluffy tail
+  const tail = withOutline(new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), toonMat(FLUFFY)));
+  tail.position.set(-0.32, 0.22, 0);
+  g.add(tail);
+
+  outer.position.y = 0.3;
+  return outer;
+}
+
+function nearestTree(x, z) {
+  let best = treePositions[0];
+  let bestDist = Infinity;
+  for (const tp of treePositions) {
+    const d = Math.hypot(tp.x - x, tp.z - z);
+    if (d < bestDist) { bestDist = d; best = tp; }
+  }
+  return best;
+}
+
+function randomFieldPos() {
+  return { x: (Math.random() - 0.5) * 30, z: (Math.random() - 0.5) * 30 };
+}
+
+// States: 'roam' | 'flee' | 'climbing' | 'hiding'
+const squirrels = Array.from({ length: 3 }, () => {
+  const mesh = createSquirrelMesh();
+  const pos = randomFieldPos();
+  mesh.position.set(pos.x, 0.3, pos.z);
+  scene.add(mesh);
+  return {
+    mesh,
+    state: 'roam',
+    target: randomFieldPos(),
+    hideTimer: 0,
+    pauseTimer: Math.random() * 2,
+  };
 });
 
 // --- Leaf ---
@@ -451,6 +516,76 @@ function animate() {
       gl.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0);
       gl.state = 'settled';
       gl.vx = 0; gl.vy = 0; gl.vz = 0;
+    }
+  }
+
+  // Squirrels
+  for (const sq of squirrels) {
+    const mx = sq.mesh.position.x, mz = sq.mesh.position.z;
+    const puppyDist = Math.hypot(puppy.position.x - mx, puppy.position.z - mz);
+
+    if (sq.state === 'roam') {
+      // Notice puppy if close
+      if (puppyDist < 5.5) {
+        sq.state = 'flee';
+        const tree = nearestTree(mx, mz);
+        sq.target = { x: tree.x, z: tree.z };
+      } else {
+        // Wander slowly
+        if (sq.pauseTimer > 0) { sq.pauseTimer -= 0.016; continue; }
+        const dx = sq.target.x - mx, dz = sq.target.z - mz;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 0.5) {
+          sq.pauseTimer = 1.0 + Math.random() * 3;
+          sq.target = randomFieldPos();
+        } else {
+          const angle = Math.atan2(-dx, -dz);
+          let diff = angle - sq.mesh.rotation.y;
+          while (diff >  Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          sq.mesh.rotation.y += diff * 0.1;
+          sq.mesh.position.x += (dx / dist) * 0.04;
+          sq.mesh.position.z += (dz / dist) * 0.04;
+          const b = 1 + Math.sin(t * 14) * 0.07;
+          sq.mesh.scale.set(b, 1 / b, b);
+        }
+      }
+
+    } else if (sq.state === 'flee') {
+      const dx = sq.target.x - mx, dz = sq.target.z - mz;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 1.2) {
+        sq.state = 'climbing';
+      } else {
+        const angle = Math.atan2(-dx, -dz);
+        let diff = angle - sq.mesh.rotation.y;
+        while (diff >  Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        sq.mesh.rotation.y += diff * 0.15;
+        sq.mesh.position.x += (dx / dist) * 0.18;
+        sq.mesh.position.z += (dz / dist) * 0.18;
+        const b = 1 + Math.sin(t * 20) * 0.08;
+        sq.mesh.scale.set(b, 1 / b, b);
+      }
+
+    } else if (sq.state === 'climbing') {
+      // Shrink into the tree
+      sq.mesh.scale.lerp(new THREE.Vector3(0.01, 0.01, 0.01), 0.1);
+      if (sq.mesh.scale.x < 0.05) {
+        sq.state = 'hiding';
+        sq.hideTimer = 4 + Math.random() * 4;
+        sq.mesh.position.set(999, 0.3, 999); // offscreen
+      }
+
+    } else if (sq.state === 'hiding') {
+      sq.hideTimer -= 0.016;
+      if (sq.hideTimer <= 0) {
+        const pos = randomFieldPos();
+        sq.mesh.position.set(pos.x, 0.3, pos.z);
+        sq.mesh.scale.set(1, 1, 1);
+        sq.target = randomFieldPos();
+        sq.state = 'roam';
+      }
     }
   }
 
