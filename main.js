@@ -370,11 +370,9 @@ window.addEventListener('keyup',   e => { keys[e.key] = false; });
 
 // --- Touch / Joystick ---
 const joy = { x: 0, y: 0 }; // normalised -1..1
-let touchJump = false;
-
 const joystickBase = document.getElementById('joystick-base');
 const joystickKnob = document.getElementById('joystick-knob');
-const jumpBtn      = document.getElementById('jump-btn');
+const barkBtn      = document.getElementById('bark-btn');
 
 if (joystickBase) {
   const RADIUS = 38; // max knob travel in px
@@ -418,21 +416,32 @@ if (joystickBase) {
   }
 }
 
-if (jumpBtn) {
-  jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); touchJump = true;  }, { passive: false });
-  jumpBtn.addEventListener('touchend',   e => { e.preventDefault(); touchJump = false; }, { passive: false });
+if (barkBtn) {
+  barkBtn.addEventListener('touchstart', e => { e.preventDefault(); bark(); }, { passive: false });
 }
 
 const MOVE_SPEED = 0.12;
 const ROT_SPEED  = 0.025;
-let velY  = 0;
-let velX  = 0;
-let velZ  = 0;
-let onGround = true;
-const GRAVITY       = 0.009;
-const JUMP_FORCE    = 0.16;
-const AIR_CONTROL   = 0.08;
-const GROUND_DRAG   = 0.75;
+let velX = 0;
+let velZ = 0;
+
+// --- Bark ---
+function bark() {
+  initMusic(); // ensure audio context exists
+  if (!musicCtx) return;
+  const now = musicCtx.currentTime;
+  const osc = musicCtx.createOscillator();
+  const g = musicCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(360, now);
+  osc.frequency.exponentialRampToValueAtTime(75, now + 0.18);
+  g.gain.setValueAtTime(0.55, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+  osc.connect(g);
+  g.connect(musicCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.25);
+}
 
 // --- Music ---
 // Doo-wop progression: A maj → F# min → B min → E maj (I–vi–ii–V in A)
@@ -511,7 +520,10 @@ function initMusic() {
 
 // Start on first interaction, toggle with mute button
 function onFirstInteraction() { initMusic(); }
-window.addEventListener('keydown',   onFirstInteraction, { once: true });
+window.addEventListener('keydown', e => {
+  onFirstInteraction();
+  if (e.code === 'Space') { e.preventDefault(); bark(); }
+}, { once: false });
 window.addEventListener('touchstart', onFirstInteraction, { once: true });
 
 const muteBtn = document.getElementById('mute-btn');
@@ -534,56 +546,25 @@ function animate() {
   if (keys['ArrowLeft']  || keys['a'] || joy.x < -0.25) puppy.rotation.y += ROT_SPEED;
   if (keys['ArrowRight'] || keys['d'] || joy.x >  0.25) puppy.rotation.y -= ROT_SPEED;
 
-  // Forward / back — on ground: direct control; in air: gentle steering
+  // Forward / back
   const moving = keys['ArrowUp'] || keys['w'] || keys['ArrowDown'] || keys['s'] || Math.abs(joy.y) > 0.25;
-  if (onGround) {
-    velX = 0; velZ = 0;
-    const fwd = (keys['ArrowUp']   || keys['w']) ? 1 : (joy.y < -0.25 ? -joy.y : 0);
-    const bwd = (keys['ArrowDown'] || keys['s']) ? 1 : (joy.y >  0.25 ?  joy.y : 0);
-    if (fwd) { velX = -Math.sin(puppy.rotation.y) * MOVE_SPEED * fwd; velZ = -Math.cos(puppy.rotation.y) * MOVE_SPEED * fwd; }
-    if (bwd) { velX =  Math.sin(puppy.rotation.y) * MOVE_SPEED * bwd; velZ =  Math.cos(puppy.rotation.y) * MOVE_SPEED * bwd; }
-  } else {
-    // air steering
-    const fwd = (keys['ArrowUp']   || keys['w']) ? 1 : (joy.y < -0.25 ? -joy.y : 0);
-    const bwd = (keys['ArrowDown'] || keys['s']) ? 1 : (joy.y >  0.25 ?  joy.y : 0);
-    if (fwd) { velX += -Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * fwd; velZ += -Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * fwd; }
-    if (bwd) { velX +=  Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * bwd; velZ +=  Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * bwd; }
-    // cap air speed
-    const spd = Math.sqrt(velX * velX + velZ * velZ);
-    if (spd > MOVE_SPEED * 1.8) { velX *= MOVE_SPEED * 1.8 / spd; velZ *= MOVE_SPEED * 1.8 / spd; }
-  }
+  velX = 0; velZ = 0;
+  const fwd = (keys['ArrowUp']   || keys['w']) ? 1 : (joy.y < -0.25 ? -joy.y : 0);
+  const bwd = (keys['ArrowDown'] || keys['s']) ? 1 : (joy.y >  0.25 ?  joy.y : 0);
+  if (fwd) { velX = -Math.sin(puppy.rotation.y) * MOVE_SPEED * fwd; velZ = -Math.cos(puppy.rotation.y) * MOVE_SPEED * fwd; }
+  if (bwd) { velX =  Math.sin(puppy.rotation.y) * MOVE_SPEED * bwd; velZ =  Math.cos(puppy.rotation.y) * MOVE_SPEED * bwd; }
   puppy.position.x += velX;
   puppy.position.z += velZ;
   if (inPond(puppy.position.x, puppy.position.z)) {
     puppy.position.x -= velX;
     puppy.position.z -= velZ;
-    velX = 0; velZ = 0;
   }
-
-  // Jump — carry current ground velocity into the air
-  if ((keys[' '] || touchJump) && onGround) {
-    velY = JUMP_FORCE;
-    onGround = false;
-  }
-  velY -= GRAVITY;
-  puppy.position.y += velY;
-  if (puppy.position.y <= 0.75) {
-    puppy.position.y = 0.75;
-    velY = 0;
-    // bleed off horizontal momentum on landing
-    velX *= GROUND_DRAG;
-    velZ *= GROUND_DRAG;
-    onGround = true;
-  }
+  puppy.position.y = 0.75;
 
   // Squash & stretch
   if (moving) {
     const b = 1 + Math.sin(t * 12) * 0.07;
     puppy.scale.set(b, 1 / b, b);
-  } else if (!onGround) {
-    // Stretch on the way up, squash on the way down
-    const stretch = velY > 0 ? 1 + velY * 1.2 : 1 - Math.abs(velY) * 0.5;
-    puppy.scale.set(1 / stretch, stretch, 1 / stretch);
   } else {
     puppy.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
   }
@@ -636,7 +617,7 @@ function animate() {
   }
 
   // Scatter ground leaves when puppy runs through them
-  if (moving || !onGround) scatterNearby(puppy.position.x, puppy.position.z);
+  if (moving) scatterNearby(puppy.position.x, puppy.position.z);
 
   // Update airborne ground leaves
   for (const gl of groundLeaves) {
