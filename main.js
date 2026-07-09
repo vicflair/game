@@ -198,6 +198,61 @@ const keys = {};
 window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault(); });
 window.addEventListener('keyup',   e => { keys[e.key] = false; });
 
+// --- Touch / Joystick ---
+const joy = { x: 0, y: 0 }; // normalised -1..1
+let touchJump = false;
+
+const joystickBase = document.getElementById('joystick-base');
+const joystickKnob = document.getElementById('joystick-knob');
+const jumpBtn      = document.getElementById('jump-btn');
+
+if (joystickBase) {
+  const RADIUS = 38; // max knob travel in px
+  let activeTouchId = null;
+
+  joystickBase.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    activeTouchId = touch.identifier;
+    updateJoy(touch);
+  }, { passive: false });
+
+  window.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const touch of e.changedTouches) {
+      if (touch.identifier === activeTouchId) updateJoy(touch);
+    }
+  }, { passive: false });
+
+  window.addEventListener('touchend', e => {
+    for (const touch of e.changedTouches) {
+      if (touch.identifier === activeTouchId) {
+        activeTouchId = null;
+        joy.x = 0; joy.y = 0;
+        joystickKnob.style.transform = 'translate(-50%, -50%)';
+      }
+    }
+  });
+
+  function updateJoy(touch) {
+    const rect = joystickBase.getBoundingClientRect();
+    const cx = rect.left + rect.width  / 2;
+    const cy = rect.top  + rect.height / 2;
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > RADIUS) { dx *= RADIUS / dist; dy *= RADIUS / dist; }
+    joy.x = dx / RADIUS;
+    joy.y = dy / RADIUS;
+    joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+}
+
+if (jumpBtn) {
+  jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); touchJump = true;  }, { passive: false });
+  jumpBtn.addEventListener('touchend',   e => { e.preventDefault(); touchJump = false; }, { passive: false });
+}
+
 const MOVE_SPEED = 0.12;
 const ROT_SPEED  = 0.045;
 let velY  = 0;
@@ -218,31 +273,23 @@ function animate() {
   t += 0.016;
 
   // Rotation
-  if (keys['ArrowLeft']  || keys['a']) puppy.rotation.y += ROT_SPEED;
-  if (keys['ArrowRight'] || keys['d']) puppy.rotation.y -= ROT_SPEED;
+  if (keys['ArrowLeft']  || keys['a'] || joy.x < -0.25) puppy.rotation.y += ROT_SPEED;
+  if (keys['ArrowRight'] || keys['d'] || joy.x >  0.25) puppy.rotation.y -= ROT_SPEED;
 
   // Forward / back — on ground: direct control; in air: gentle steering
-  const moving = keys['ArrowUp'] || keys['w'] || keys['ArrowDown'] || keys['s'];
+  const moving = keys['ArrowUp'] || keys['w'] || keys['ArrowDown'] || keys['s'] || Math.abs(joy.y) > 0.25;
   if (onGround) {
     velX = 0; velZ = 0;
-    if (keys['ArrowUp']   || keys['w']) {
-      velX = -Math.sin(puppy.rotation.y) * MOVE_SPEED;
-      velZ = -Math.cos(puppy.rotation.y) * MOVE_SPEED;
-    }
-    if (keys['ArrowDown'] || keys['s']) {
-      velX = Math.sin(puppy.rotation.y) * MOVE_SPEED;
-      velZ = Math.cos(puppy.rotation.y) * MOVE_SPEED;
-    }
+    const fwd = (keys['ArrowUp']   || keys['w']) ? 1 : (joy.y < -0.25 ? -joy.y : 0);
+    const bwd = (keys['ArrowDown'] || keys['s']) ? 1 : (joy.y >  0.25 ?  joy.y : 0);
+    if (fwd) { velX = -Math.sin(puppy.rotation.y) * MOVE_SPEED * fwd; velZ = -Math.cos(puppy.rotation.y) * MOVE_SPEED * fwd; }
+    if (bwd) { velX =  Math.sin(puppy.rotation.y) * MOVE_SPEED * bwd; velZ =  Math.cos(puppy.rotation.y) * MOVE_SPEED * bwd; }
   } else {
-    // air steering: nudge velocity toward intended direction
-    if (keys['ArrowUp']   || keys['w']) {
-      velX += -Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
-      velZ += -Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
-    }
-    if (keys['ArrowDown'] || keys['s']) {
-      velX += Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
-      velZ += Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL;
-    }
+    // air steering
+    const fwd = (keys['ArrowUp']   || keys['w']) ? 1 : (joy.y < -0.25 ? -joy.y : 0);
+    const bwd = (keys['ArrowDown'] || keys['s']) ? 1 : (joy.y >  0.25 ?  joy.y : 0);
+    if (fwd) { velX += -Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * fwd; velZ += -Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * fwd; }
+    if (bwd) { velX +=  Math.sin(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * bwd; velZ +=  Math.cos(puppy.rotation.y) * MOVE_SPEED * AIR_CONTROL * bwd; }
     // cap air speed
     const spd = Math.sqrt(velX * velX + velZ * velZ);
     if (spd > MOVE_SPEED * 1.8) { velX *= MOVE_SPEED * 1.8 / spd; velZ *= MOVE_SPEED * 1.8 / spd; }
@@ -251,7 +298,7 @@ function animate() {
   puppy.position.z += velZ;
 
   // Jump — carry current ground velocity into the air
-  if (keys[' '] && onGround) {
+  if ((keys[' '] || touchJump) && onGround) {
     velY = JUMP_FORCE;
     onGround = false;
   }
