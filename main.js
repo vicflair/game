@@ -450,7 +450,7 @@ function initMusic() {
   musicCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = musicCtx.createGain();
-  masterGain.gain.value = 0.45;
+  masterGain.gain.value = 0.75;
   masterGain.connect(musicCtx.destination);
 
   // Warm delay reverb
