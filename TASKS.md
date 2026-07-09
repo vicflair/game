@@ -10,10 +10,13 @@
 - [x] Shadow blobs beneath leaves for depth perception
 - [x] Touch joystick + jump button (mobile only)
 
-## In Progress
-- [ ] Golden leaves (5% spawn rate, 50pts, falls fast or zooms horizontally, chime on catch)
+## Done (continued)
+- [x] Ground leaf accumulation — missed leaves settle and build a colorful carpet
+- [x] Scatter explosion — running through ground leaves bursts them into the air
 
 ## To Do
+- [ ] Golden leaves (5% spawn rate, 50pts, falls fast or zooms horizontally, chime on catch)
+- [ ] Wind gusts — periodic bursts that push leaves in a direction, creating swarms to chase
 - [ ] 3-phase sky timeline (90s total)
   - 0–45s: warm cream sky, normal leaf speed
   - 45–75s: lerp to peach/lavender, wind doubles, leaves speed up, banner "The evening breeze awakens..."
