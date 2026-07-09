@@ -73,9 +73,9 @@ function makeTree(x, z, scale = 1) {
 ].forEach(([x, z, s]) => makeTree(x, z, s));
 
 // --- Puppy ---
-function createPuppyMesh() {
-  const TERRA = 0xc1663a;
-  const DARK  = 0x3b1f0e;
+function createPuppyMesh(bodyColor = 0xc1663a, darkColor = 0x3b1f0e, snoutColor = 0xe8906a) {
+  const TERRA = bodyColor;
+  const DARK  = darkColor;
   // outer: handles physics position + rotation.y for movement
   // inner: rotated so head faces -Z (forward), matching movement direction
   const outer = new THREE.Group();
@@ -96,7 +96,7 @@ function createPuppyMesh() {
   g.add(head);
 
   // Snout
-  const snout = withOutline(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.2), toonMat(0xe8906a)));
+  const snout = withOutline(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.2), toonMat(snoutColor)));
   snout.position.set(1.2, 0.15, 0);
   g.add(snout);
 
@@ -132,6 +132,27 @@ scene.add(puppy);
 
 // Bounding radius for collision
 const PUPPY_RADIUS = 1.1;
+
+// --- NPC Dogs ---
+const NPC_CONFIGS = [
+  { body: 0xe8a030, dark: 0x7a4a10, snout: 0xf0c060 }, // golden retriever
+  { body: 0x2d2d2d, dark: 0x111111, snout: 0x555555 }, // black lab
+];
+
+function newRoamTarget() {
+  return new THREE.Vector3(
+    (Math.random() - 0.5) * 22,
+    0.75,
+    (Math.random() - 0.5) * 22
+  );
+}
+
+const npcDogs = NPC_CONFIGS.map(({ body, dark, snout }) => {
+  const mesh = createPuppyMesh(body, dark, snout);
+  mesh.position.set((Math.random() - 0.5) * 16, 0.75, (Math.random() - 0.5) * 16);
+  scene.add(mesh);
+  return { mesh, target: newRoamTarget(), speed: 0.05 + Math.random() * 0.025, pauseTimer: 0 };
+});
 
 // --- Leaf ---
 const LEAF_COLORS = [0xc1663a, 0xe07850, 0x8b9e5a]; // terracotta, coral, sage
@@ -430,6 +451,35 @@ function animate() {
       gl.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0);
       gl.state = 'settled';
       gl.vx = 0; gl.vy = 0; gl.vz = 0;
+    }
+  }
+
+  // NPC dogs — simple roam AI
+  for (const npc of npcDogs) {
+    if (npc.pauseTimer > 0) {
+      npc.pauseTimer -= 0.016;
+      npc.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.15);
+      continue;
+    }
+    const dx = npc.target.x - npc.mesh.position.x;
+    const dz = npc.target.z - npc.mesh.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 0.6) {
+      npc.pauseTimer = 1.0 + Math.random() * 2.5;
+      npc.target = newRoamTarget();
+    } else {
+      // smooth rotation toward target
+      const targetAngle = Math.atan2(-dx, -dz);
+      let diff = targetAngle - npc.mesh.rotation.y;
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      npc.mesh.rotation.y += diff * 0.07;
+      // move
+      npc.mesh.position.x += (dx / dist) * npc.speed;
+      npc.mesh.position.z += (dz / dist) * npc.speed;
+      // walk bounce
+      const b = 1 + Math.sin(t * 10) * 0.06;
+      npc.mesh.scale.set(b, 1 / b, b);
     }
   }
 
