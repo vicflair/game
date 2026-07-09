@@ -145,11 +145,28 @@ function createLeafMesh(golden = false) {
 }
 
 const LEAF_COUNT = 30;
+const LEAF_MAX_Y = 14;
+
+// Shared shadow geometry + material (reused across all blobs)
+const shadowGeo = new THREE.CircleGeometry(0.55, 16);
+const shadowMat = new THREE.MeshBasicMaterial({
+  color: 0x000000,
+  transparent: true,
+  depthWrite: false,
+});
+
+function createShadow() {
+  const shadow = new THREE.Mesh(shadowGeo, shadowMat.clone());
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.02; // just above ground to avoid z-fighting
+  scene.add(shadow);
+  return shadow;
+}
 
 // staggered: true on init so leaves start at random heights, not all at the top
 function spawnLeaf(staggered = false) {
   const leaf = createLeafMesh(false);
-  const startY = staggered ? Math.random() * 14 : 14;
+  const startY = staggered ? Math.random() * LEAF_MAX_Y : LEAF_MAX_Y;
   leaf.position.set(
     puppy.position.x + (Math.random() - 0.5) * 26,
     startY,
@@ -159,9 +176,15 @@ function spawnLeaf(staggered = false) {
     swayOffset: Math.random() * Math.PI * 2,
     swaySpeed:  0.6 + Math.random() * 0.5,
     fallSpeed:  0.04 + Math.random() * 0.025,
+    shadow:     createShadow(),
   };
   scene.add(leaf);
   return leaf;
+}
+
+function removeLeaf(leaf) {
+  scene.remove(leaf);
+  scene.remove(leaf.userData.shadow);
 }
 
 const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
@@ -248,9 +271,17 @@ function animate() {
     l.rotation.y += 0.025;
     l.rotation.z  = Math.sin(t * d.swaySpeed + d.swayOffset) * 0.35;
 
+    // Shadow blob — tracks XZ of leaf, fades + shrinks with height
+    const heightRatio = Math.max(0, Math.min(1, 1 - l.position.y / LEAF_MAX_Y));
+    d.shadow.position.x = l.position.x;
+    d.shadow.position.z = l.position.z;
+    d.shadow.material.opacity = heightRatio * 0.45;
+    const s = 0.3 + heightRatio * 0.9;
+    d.shadow.scale.set(s, s, s);
+
     // Respawn at top if it hits the ground
     if (l.position.y < 0) {
-      scene.remove(l);
+      removeLeaf(l);
       leaves[i] = spawnLeaf(false);
       continue;
     }
@@ -260,7 +291,7 @@ function animate() {
     const dy = puppy.position.y - l.position.y;
     const dz = puppy.position.z - l.position.z;
     if (Math.sqrt(dx * dx + dy * dy + dz * dz) < PUPPY_RADIUS + 0.4) {
-      scene.remove(l);
+      removeLeaf(l);
       leaves[i] = spawnLeaf(false);
       score++;
       scoreEl.innerText = score;
