@@ -75,6 +75,46 @@ function makeTree(x, z, scale = 1) {
   [  0, -28, 1.15], [-28, -4, 0.95], [28, 2, 1.05], [6, 26, 1.1],
 ].forEach(([x, z, s]) => makeTree(x, z, s));
 
+// --- Pond ---
+const POND = { x: 8, z: 5, rx: 5.5, rz: 5.0 }; // ellipse bounds used for NPC avoidance
+
+function inPond(x, z) {
+  return ((x - POND.x) / POND.rx) ** 2 + ((z - POND.z) / POND.rz) ** 2 < 1;
+}
+
+const pondGroup = new THREE.Group();
+
+// Water surface
+const water = new THREE.Mesh(
+  new THREE.CircleGeometry(1, 48),
+  new THREE.MeshToonMaterial({ color: 0x5b9bd5, roughness: 1.0 })
+);
+water.rotation.x = -Math.PI / 2;
+water.scale.set(POND.rx, POND.rz, 1);
+water.position.set(POND.x, 0.03, POND.z);
+// Outline
+const waterOutline = new THREE.Mesh(
+  water.geometry,
+  new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide })
+);
+waterOutline.scale.setScalar(1.04);
+water.add(waterOutline);
+scene.add(water);
+
+// Lily pads
+[[0, 1.2], [2.0, -0.8], [-1.8, 1.2], [-0.5, -1.2], [1.5, 1.5]].forEach(([lx, lz]) => {
+  const pad = new THREE.Mesh(
+    new THREE.CircleGeometry(0.35, 8),
+    new THREE.MeshToonMaterial({ color: 0x6aaa50, roughness: 1.0 })
+  );
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.set(POND.x + lx, 0.05, POND.z + lz);
+  const padOutline = new THREE.Mesh(pad.geometry, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
+  padOutline.scale.setScalar(1.08);
+  pad.add(padOutline);
+  scene.add(pad);
+});
+
 // --- Puppy ---
 function createPuppyMesh(bodyColor = 0xc1663a, darkColor = 0x3b1f0e, snoutColor = 0xe8906a) {
   const TERRA = bodyColor;
@@ -143,11 +183,9 @@ const NPC_CONFIGS = [
 ];
 
 function newRoamTarget() {
-  return new THREE.Vector3(
-    (Math.random() - 0.5) * 22,
-    0.75,
-    (Math.random() - 0.5) * 22
-  );
+  let x, z;
+  do { x = (Math.random() - 0.5) * 22; z = (Math.random() - 0.5) * 22; } while (inPond(x, z));
+  return new THREE.Vector3(x, 0.75, z);
 }
 
 const npcDogs = NPC_CONFIGS.map(({ body, dark, snout }) => {
@@ -201,7 +239,9 @@ function nearestTree(x, z) {
 }
 
 function randomFieldPos() {
-  return { x: (Math.random() - 0.5) * 30, z: (Math.random() - 0.5) * 30 };
+  let x, z;
+  do { x = (Math.random() - 0.5) * 30; z = (Math.random() - 0.5) * 30; } while (inPond(x, z));
+  return { x, z };
 }
 
 // States: 'roam' | 'flee' | 'climbing' | 'hiding'
@@ -544,8 +584,11 @@ function animate() {
           while (diff >  Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
           sq.mesh.rotation.y += diff * 0.1;
-          sq.mesh.position.x += (dx / dist) * 0.04;
-          sq.mesh.position.z += (dz / dist) * 0.04;
+          const sx = sq.mesh.position.x + (dx / dist) * 0.04;
+          const sz = sq.mesh.position.z + (dz / dist) * 0.04;
+          if (inPond(sx, sz)) { sq.target = randomFieldPos(); } else {
+            sq.mesh.position.x = sx; sq.mesh.position.z = sz;
+          }
           const b = 1 + Math.sin(t * 14) * 0.07;
           sq.mesh.scale.set(b, 1 / b, b);
         }
@@ -609,9 +652,12 @@ function animate() {
       while (diff >  Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
       npc.mesh.rotation.y += diff * 0.07;
-      // move
-      npc.mesh.position.x += (dx / dist) * npc.speed;
-      npc.mesh.position.z += (dz / dist) * npc.speed;
+      // move — reroute if heading into pond
+      const nx = npc.mesh.position.x + (dx / dist) * npc.speed;
+      const nz = npc.mesh.position.z + (dz / dist) * npc.speed;
+      if (inPond(nx, nz)) { npc.target = newRoamTarget(); } else {
+        npc.mesh.position.x = nx; npc.mesh.position.z = nz;
+      }
       // walk bounce
       const b = 1 + Math.sin(t * 10) * 0.06;
       npc.mesh.scale.set(b, 1 / b, b);
