@@ -47,21 +47,30 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// A few static trees for depth
-function makeTree(x, z) {
+// A few static trees for depth — varied sizes for a natural feel
+const TREE_COLORS = [0xe8724a, 0xc1663a, 0xe8a030, 0xd4522a, 0x8b9e5a, 0xcc7722];
+
+function makeTree(x, z, scale = 1) {
   const g = new THREE.Group();
-  const trunk = withOutline(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1.6, 8), toonMat(0x5d3a1a)));
-  trunk.position.y = 0.8;
+  const trunkH = 4.0 * scale;
+  const trunk = withOutline(new THREE.Mesh(new THREE.CylinderGeometry(0.28 * scale, 0.42 * scale, trunkH, 8), toonMat(0x5d3a1a)));
+  trunk.position.y = trunkH / 2;
   trunk.castShadow = true;
   g.add(trunk);
-  const canopy = withOutline(new THREE.Mesh(new THREE.SphereGeometry(1.4, 8, 8), toonMat(0xe8724a)));
-  canopy.position.y = 2.8;
+  const canopyR = 2.6 * scale;
+  const color = TREE_COLORS[Math.floor(Math.random() * TREE_COLORS.length)];
+  const canopy = withOutline(new THREE.Mesh(new THREE.SphereGeometry(canopyR, 8, 8), toonMat(color)));
+  canopy.position.y = trunkH + canopyR * 0.7;
   canopy.castShadow = true;
   g.add(canopy);
   g.position.set(x, 0, z);
   scene.add(g);
 }
-[[-8, -6], [9, -8], [-12, 4], [11, 3], [0, -10]].forEach(([x, z]) => makeTree(x, z));
+[
+  [-22, -18, 1.2], [24, -20, 1.0], [-26,  8, 1.3], [20, 14, 0.9],
+  [ -8, -24, 1.1], [10, -26, 0.85], [-18, 22, 1.0], [22, 20, 1.2],
+  [  0, -28, 1.15], [-28, -4, 0.95], [28, 2, 1.05], [6, 26, 1.1],
+].forEach(([x, z, s]) => makeTree(x, z, s));
 
 // --- Puppy ---
 function createPuppyMesh() {
@@ -195,9 +204,7 @@ function settleLeaf(fallingLeaf) {
   // Remove shadow, detach from falling pool
   scene.remove(fallingLeaf.userData.shadow);
   fallingLeaf.position.y = 0.04;
-  fallingLeaf.rotation.x = -Math.PI / 2;
-  fallingLeaf.rotation.y = Math.random() * Math.PI * 2;
-  fallingLeaf.rotation.z = 0;
+  fallingLeaf.rotation.set(0, Math.random() * Math.PI * 2, 0);
   groundLeaves.push({ mesh: fallingLeaf, state: 'settled', vx: 0, vy: 0, vz: 0 });
   if (groundLeaves.length > MAX_GROUND_LEAVES) {
     const oldest = groundLeaves.shift();
@@ -420,9 +427,7 @@ function animate() {
     gl.mesh.rotation.y += 0.06;
     if (gl.mesh.position.y <= 0.04) {
       gl.mesh.position.y = 0.04;
-      gl.mesh.rotation.x = -Math.PI / 2;
-      gl.mesh.rotation.y = Math.random() * Math.PI * 2;
-      gl.mesh.rotation.z = 0;
+      gl.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0);
       gl.state = 'settled';
       gl.vx = 0; gl.vy = 0; gl.vz = 0;
     }
