@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leaves and Bark</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { overflow: hidden; background: #fffaf0; font-family: 'Georgia', serif; }
+      #hud {
+        position: absolute;
+        top: 16px; left: 20px;
+        color: #1a1a1a;
+        font-size: 20px;
+        font-weight: bold;
+        pointer-events: none;
+        letter-spacing: 0.05em;
+      }
+      #hud span { color: #c1663a; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">🍂 <span id="score">0</span> leaves</div>
+    <div id="app"></div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
