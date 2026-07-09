@@ -422,7 +422,7 @@ if (jumpBtn) {
 }
 
 const MOVE_SPEED = 0.12;
-const ROT_SPEED  = 0.045;
+const ROT_SPEED  = 0.025;
 let velY  = 0;
 let velX  = 0;
 let velZ  = 0;
