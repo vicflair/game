@@ -205,7 +205,7 @@ function spawnLeaf(staggered = false) {
   leaf.userData = {
     swayOffset: Math.random() * Math.PI * 2,
     swaySpeed:  0.6 + Math.random() * 0.5,
-    fallSpeed:  0.04 + Math.random() * 0.025,
+    fallSpeed:  0.018 + Math.random() * 0.012,
     shadow:     createShadow(),
   };
   scene.add(leaf);
