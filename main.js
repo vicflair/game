@@ -198,9 +198,9 @@ function spawnLeaf(staggered = false) {
   const leaf = createLeafMesh(false);
   const startY = staggered ? Math.random() * LEAF_MAX_Y : LEAF_MAX_Y;
   leaf.position.set(
-    puppy.position.x + (Math.random() - 0.5) * 26,
+    (Math.random() - 0.5) * 50,
     startY,
-    puppy.position.z + (Math.random() - 0.5) * 26
+    (Math.random() - 0.5) * 50
   );
   leaf.userData = {
     swayOffset: Math.random() * Math.PI * 2,
