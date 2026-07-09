@@ -432,6 +432,98 @@ const JUMP_FORCE    = 0.16;
 const AIR_CONTROL   = 0.08;
 const GROUND_DRAG   = 0.75;
 
+// --- Music ---
+// Doo-wop progression: A maj → F# min → B min → E maj (I–vi–ii–V in A)
+let musicCtx = null;
+let masterGain = null;
+let muted = false;
+
+const PROGRESSION = [
+  { bass: 110.00, voices: [220.00, 277.18, 329.63, 440.00] }, // A  maj: A2 | A3 C#4 E4 A4
+  { bass:  92.50, voices: [185.00, 220.00, 277.18, 369.99] }, // F# min: F#2 | F#3 A3 C#4 F#4
+  { bass: 123.47, voices: [246.94, 293.66, 369.99, 493.88] }, // B  min: B2 | B3 D4 F#4 B4
+  { bass:  82.41, voices: [164.81, 207.65, 246.94, 329.63] }, // E  maj: E2 | E3 G#3 B3 E4
+];
+
+function initMusic() {
+  if (musicCtx) return;
+  musicCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  masterGain = musicCtx.createGain();
+  masterGain.gain.value = 0.22;
+  masterGain.connect(musicCtx.destination);
+
+  // Warm delay reverb
+  const delay = musicCtx.createDelay(0.6);
+  delay.delayTime.value = 0.28;
+  const fbGain = musicCtx.createGain();
+  fbGain.gain.value = 0.22;
+  const wetGain = musicCtx.createGain();
+  wetGain.gain.value = 0.18;
+  delay.connect(fbGain);
+  fbGain.connect(delay);
+  delay.connect(wetGain);
+  wetGain.connect(masterGain);
+
+  function note(freq, start, dur, vol, type = 'sine') {
+    const osc = musicCtx.createOscillator();
+    const g   = musicCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.connect(g);
+    g.connect(masterGain);
+    g.connect(delay);
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(vol, start + 0.08);
+    g.gain.setValueAtTime(vol, start + dur - 0.25);
+    g.gain.linearRampToValueAtTime(0, start + dur);
+    osc.start(start);
+    osc.stop(start + dur + 0.05);
+  }
+
+  const BPM = 72;
+  const BEAT = 60 / BPM;
+  const CHORD = BEAT * 4;
+  const LOOP  = CHORD * PROGRESSION.length;
+
+  function scheduleLoop(t0) {
+    PROGRESSION.forEach((chord, i) => {
+      const t  = t0 + i * CHORD;
+      const v  = chord.voices;
+      const mid = v[1]; // second voice
+      const top = v[v.length - 1];
+
+      // Beat 1: bottom (bass)
+      note(chord.bass, t,            BEAT * 0.8, 0.28, 'triangle');
+      // Beat 2: middle note
+      note(mid,        t + BEAT,     BEAT * 0.8, 0.13);
+      // Beat 3: top note
+      note(top,        t + BEAT * 2, BEAT * 0.8, 0.11);
+      // Beat 4: full chord strum
+      note(chord.bass, t + BEAT * 3, BEAT * 0.9, 0.22, 'triangle');
+      v.forEach(freq => note(freq, t + BEAT * 3, BEAT * 0.9, 0.065));
+    });
+    // Re-schedule just before loop end
+    const ms = (t0 + LOOP - musicCtx.currentTime - 0.6) * 1000;
+    setTimeout(() => scheduleLoop(t0 + LOOP), Math.max(0, ms));
+  }
+
+  scheduleLoop(musicCtx.currentTime + 0.2);
+}
+
+// Start on first interaction, toggle with mute button
+function onFirstInteraction() { initMusic(); }
+window.addEventListener('keydown',   onFirstInteraction, { once: true });
+window.addEventListener('touchstart', onFirstInteraction, { once: true });
+
+const muteBtn = document.getElementById('mute-btn');
+muteBtn.addEventListener('click', () => {
+  initMusic(); // in case first interaction was the mute button
+  muted = !muted;
+  masterGain.gain.value = muted ? 0 : 0.22;
+  muteBtn.textContent = muted ? '♪̶' : '♪';
+});
+
 // --- Game loop ---
 let t = 0;
 const camPos = new THREE.Vector3(0, 8, 16);
