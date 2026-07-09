@@ -450,7 +450,7 @@ function initMusic() {
   musicCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = musicCtx.createGain();
-  masterGain.gain.value = 0.22;
+  masterGain.gain.value = 0.45;
   masterGain.connect(musicCtx.destination);
 
   // Warm delay reverb
@@ -516,7 +516,7 @@ const muteBtn = document.getElementById('mute-btn');
 muteBtn.addEventListener('click', () => {
   initMusic(); // in case first interaction was the mute button
   muted = !muted;
-  masterGain.gain.value = muted ? 0 : 0.22;
+  masterGain.gain.value = muted ? 0 : 0.45;
   muteBtn.textContent = muted ? '♪̶' : '♪';
 });
 
