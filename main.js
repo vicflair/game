@@ -1,189 +1,269 @@
 import * as THREE from 'three';
 
-// --- Scene Setup ---
+// --- Scene ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a1a);
+scene.background = new THREE.Color(0xfffaf0);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, -14, 12);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 8, 16);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
 document.getElementById('app').appendChild(renderer.domElement);
 
 // --- Lighting ---
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight.position.set(5, -5, 10);
-scene.add(dirLight);
+const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambient);
 
-// --- Constants ---
-const BOARD_W = 14;
-const BOARD_H = 16;
-const PADDLE_SPEED = 0.18;
-const BALL_SPEED_INIT = 0.13;
+const sun = new THREE.DirectionalLight(0xfff5e0, 1.2);
+sun.position.set(8, 14, 6);
+sun.castShadow = true;
+scene.add(sun);
 
-// --- Paddle ---
-const paddle = new THREE.Mesh(
-  new THREE.BoxGeometry(3, 0.6, 0.6),
-  new THREE.MeshStandardMaterial({ color: 0x00ffcc, roughness: 0.2 })
-);
-paddle.position.set(0, -7, 0.3);
-scene.add(paddle);
-
-// --- Ball ---
-const ball = new THREE.Mesh(
-  new THREE.SphereGeometry(0.3, 16, 16),
-  new THREE.MeshStandardMaterial({ color: 0xff0055, emissive: 0xff0022 })
-);
-ball.position.set(0, -5, 0.3);
-scene.add(ball);
-
-let ballVel = { x: BALL_SPEED_INIT * 0.8, y: BALL_SPEED_INIT };
-
-// --- Bricks ---
-const bricks = [];
-const ROWS = 4, COLS = 7;
-const BRICK_W = 1.6, BRICK_H = 0.6;
-
-function buildBricks() {
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const brick = new THREE.Mesh(
-        new THREE.BoxGeometry(BRICK_W, BRICK_H, 0.5),
-        new THREE.MeshStandardMaterial({ color: new THREE.Color(`hsl(${r * 40 + 160}, 100%, 50%)`) })
-      );
-      brick.position.set(
-        (c - (COLS - 1) / 2) * (BRICK_W + 0.2),
-        4 - r * (BRICK_H + 0.3),
-        0.25
-      );
-      scene.add(brick);
-      bricks.push(brick);
-    }
-  }
+// --- Material helpers ---
+function toonMat(color) {
+  return new THREE.MeshToonMaterial({ color, roughness: 1.0 });
 }
-buildBricks();
 
-// --- Walls (visual border) ---
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x444466, roughness: 0.8 });
-const wallThick = 0.4;
-[
-  { pos: [-(BOARD_W / 2 + wallThick / 2), 0, 0], size: [wallThick, BOARD_H, 1] },
-  { pos: [(BOARD_W / 2 + wallThick / 2), 0, 0],  size: [wallThick, BOARD_H, 1] },
-  { pos: [0, BOARD_H / 2 + wallThick / 2, 0],    size: [BOARD_W + wallThick * 2, wallThick, 1] },
-].forEach(({ pos, size }) => {
-  const w = new THREE.Mesh(new THREE.BoxGeometry(...size), wallMat);
-  w.position.set(...pos);
-  scene.add(w);
-});
+// Attaches a BackSide black outline as a child of the mesh
+function withOutline(mesh, scale = 1.05) {
+  const outline = new THREE.Mesh(
+    mesh.geometry,
+    new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide })
+  );
+  outline.scale.setScalar(scale);
+  mesh.add(outline);
+  return mesh;
+}
 
-// --- Game State ---
+// --- Ground ---
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  toonMat(0x8bc34a)
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// A few static trees for depth
+function makeTree(x, z) {
+  const g = new THREE.Group();
+  const trunk = withOutline(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1.6, 8), toonMat(0x5d3a1a)));
+  trunk.position.y = 0.8;
+  trunk.castShadow = true;
+  g.add(trunk);
+  const canopy = withOutline(new THREE.Mesh(new THREE.SphereGeometry(1.4, 8, 8), toonMat(0xe8724a)));
+  canopy.position.y = 2.8;
+  canopy.castShadow = true;
+  g.add(canopy);
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+[[-8, -6], [9, -8], [-12, 4], [11, 3], [0, -10]].forEach(([x, z]) => makeTree(x, z));
+
+// --- Puppy ---
+function createPuppyMesh() {
+  const TERRA = 0xc1663a;
+  const DARK  = 0x3b1f0e;
+  // outer: handles physics position + rotation.y for movement
+  // inner: rotated so head faces -Z (forward), matching movement direction
+  const outer = new THREE.Group();
+  const g = new THREE.Group();
+  g.rotation.y = Math.PI / 2;
+  outer.add(g);
+
+  // Body (capsule lying on its side)
+  const body = withOutline(new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 0.9, 8, 16), toonMat(TERRA)));
+  body.rotation.z = Math.PI / 2;
+  body.castShadow = true;
+  g.add(body);
+
+  // Head
+  const head = withOutline(new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), toonMat(TERRA)));
+  head.position.set(0.85, 0.25, 0);
+  head.castShadow = true;
+  g.add(head);
+
+  // Snout
+  const snout = withOutline(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.2), toonMat(0xe8906a)));
+  snout.position.set(1.2, 0.15, 0);
+  g.add(snout);
+
+  // Floppy ears
+  [0.18, -0.18].forEach(z => {
+    const ear = withOutline(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.38, 0.12), toonMat(DARK)));
+    ear.position.set(0.82, 0.52, z);
+    ear.rotation.z = z > 0 ? 0.25 : -0.25;
+    g.add(ear);
+  });
+
+  // Tail
+  const tail = withOutline(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.04, 0.55, 8), toonMat(TERRA)));
+  tail.position.set(-0.85, 0.38, 0);
+  tail.rotation.z = -Math.PI / 3.5;
+  g.add(tail);
+
+  // Legs (4 little boxes)
+  [[-0.35, -0.38], [0.35, -0.38]].forEach(([lx, ly]) => {
+    [-0.22, 0.22].forEach(lz => {
+      const leg = withOutline(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.38, 0.16), toonMat(TERRA)));
+      leg.position.set(lx, ly, lz);
+      g.add(leg);
+    });
+  });
+
+  outer.position.y = 0.75;
+  return outer;
+}
+
+const puppy = createPuppyMesh();
+scene.add(puppy);
+
+// Bounding radius for collision
+const PUPPY_RADIUS = 1.1;
+
+// --- Leaf ---
+const LEAF_COLORS = [0xc1663a, 0xe07850, 0x8b9e5a]; // terracotta, coral, sage
+
+function createLeafMesh(golden = false) {
+  const color = golden ? 0xf5c518 : LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)];
+  const g = new THREE.Group();
+  // Main flat quad
+  const leaf = withOutline(
+    new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 0.42), toonMat(color)),
+    1.07
+  );
+  g.add(leaf);
+  // Small stem
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.18, 6), toonMat(0x5d3a1a));
+  stem.position.set(0.3, 0, 0);
+  stem.rotation.z = Math.PI / 2;
+  g.add(stem);
+  return g;
+}
+
+const LEAF_COUNT = 30;
+
+// staggered: true on init so leaves start at random heights, not all at the top
+function spawnLeaf(staggered = false) {
+  const leaf = createLeafMesh(false);
+  const startY = staggered ? Math.random() * 14 : 14;
+  leaf.position.set(
+    puppy.position.x + (Math.random() - 0.5) * 26,
+    startY,
+    puppy.position.z + (Math.random() - 0.5) * 26
+  );
+  leaf.userData = {
+    swayOffset: Math.random() * Math.PI * 2,
+    swaySpeed:  0.6 + Math.random() * 0.5,
+    fallSpeed:  0.04 + Math.random() * 0.025,
+  };
+  scene.add(leaf);
+  return leaf;
+}
+
+const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
+
+// --- Score ---
 let score = 0;
-let lives = 3;
-let gameOver = false;
-let won = false;
-
 const scoreEl = document.getElementById('score');
-const msgEl = document.getElementById('message');
-
-function showMessage(text) {
-  msgEl.innerHTML = text;
-  msgEl.style.display = 'block';
-}
-
-function resetBall() {
-  ball.position.set(0, -3, 0.3);
-  ballVel = { x: BALL_SPEED_INIT * 0.8, y: BALL_SPEED_INIT };
-}
 
 // --- Controls ---
-const keys = { Left: false, Right: false };
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowLeft' || e.key === 'a') keys.Left = true;
-  if (e.key === 'ArrowRight' || e.key === 'd') keys.Right = true;
-  // Restart on R
-  if ((e.key === 'r' || e.key === 'R') && (gameOver || won)) restartGame();
-});
-window.addEventListener('keyup', (e) => {
-  if (e.key === 'ArrowLeft' || e.key === 'a') keys.Left = false;
-  if (e.key === 'ArrowRight' || e.key === 'd') keys.Right = false;
-});
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault(); });
+window.addEventListener('keyup',   e => { keys[e.key] = false; });
 
-function restartGame() {
-  bricks.forEach(b => scene.remove(b));
-  bricks.length = 0;
-  buildBricks();
-  score = 0;
-  lives = 3;
-  gameOver = false;
-  won = false;
-  scoreEl.innerText = score;
-  msgEl.style.display = 'none';
-  paddle.position.set(0, -7, 0.3);
-  resetBall();
-}
+const MOVE_SPEED = 0.12;
+const ROT_SPEED  = 0.045;
+let velY = 0;
+let onGround = true;
 
-// --- Animation Loop ---
+// --- Game loop ---
+let t = 0;
+const camPos = new THREE.Vector3(0, 8, 16);
+
 function animate() {
   requestAnimationFrame(animate);
+  t += 0.016;
 
-  if (!gameOver && !won) {
-    // Paddle movement
-    if (keys.Left && paddle.position.x > -BOARD_W / 2 + 1.6) paddle.position.x -= PADDLE_SPEED;
-    if (keys.Right && paddle.position.x < BOARD_W / 2 - 1.6)  paddle.position.x += PADDLE_SPEED;
+  // Rotation
+  if (keys['ArrowLeft']  || keys['a']) puppy.rotation.y += ROT_SPEED;
+  if (keys['ArrowRight'] || keys['d']) puppy.rotation.y -= ROT_SPEED;
 
-    // Ball movement
-    ball.position.x += ballVel.x;
-    ball.position.y += ballVel.y;
+  // Forward / back
+  const moving = keys['ArrowUp'] || keys['w'] || keys['ArrowDown'] || keys['s'];
+  if (keys['ArrowUp']   || keys['w']) {
+    puppy.position.x -= Math.sin(puppy.rotation.y) * MOVE_SPEED;
+    puppy.position.z -= Math.cos(puppy.rotation.y) * MOVE_SPEED;
+  }
+  if (keys['ArrowDown'] || keys['s']) {
+    puppy.position.x += Math.sin(puppy.rotation.y) * MOVE_SPEED;
+    puppy.position.z += Math.cos(puppy.rotation.y) * MOVE_SPEED;
+  }
 
-    // Wall collisions (left / right / top)
-    if (ball.position.x < -BOARD_W / 2 + 0.3) { ball.position.x = -BOARD_W / 2 + 0.3; ballVel.x = Math.abs(ballVel.x); }
-    if (ball.position.x >  BOARD_W / 2 - 0.3) { ball.position.x =  BOARD_W / 2 - 0.3; ballVel.x = -Math.abs(ballVel.x); }
-    if (ball.position.y > BOARD_H / 2) { ball.position.y = BOARD_H / 2; ballVel.y = -Math.abs(ballVel.y); }
+  // Jump
+  if ((keys[' ']) && onGround) {
+    velY = 0.2;
+    onGround = false;
+  }
+  velY -= 0.013;
+  puppy.position.y += velY;
+  if (puppy.position.y <= 0.75) {
+    puppy.position.y = 0.75;
+    velY = 0;
+    onGround = true;
+  }
 
-    // Paddle collision
-    const py = paddle.position.y;
-    if (ball.position.y >= py - 0.5 && ball.position.y <= py + 0.5 && ballVel.y < 0) {
-      if (Math.abs(ball.position.x - paddle.position.x) < 1.65) {
-        ballVel.y = Math.abs(ballVel.y);
-        ballVel.x = (ball.position.x - paddle.position.x) * 0.12;
-      }
+  // Squash & stretch
+  if (moving) {
+    const b = 1 + Math.sin(t * 12) * 0.07;
+    puppy.scale.set(b, 1 / b, b);
+  } else if (!onGround) {
+    // Stretch on the way up, squash on the way down
+    const stretch = velY > 0 ? 1 + velY * 1.2 : 1 - Math.abs(velY) * 0.5;
+    puppy.scale.set(1 / stretch, stretch, 1 / stretch);
+  } else {
+    puppy.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
+  }
+
+  // Camera — follow behind puppy
+  const behind = new THREE.Vector3(
+    puppy.position.x + Math.sin(puppy.rotation.y) * 11,
+    puppy.position.y + 7,
+    puppy.position.z + Math.cos(puppy.rotation.y) * 11
+  );
+  camPos.lerp(behind, 0.07);
+  camera.position.copy(camPos);
+  camera.lookAt(puppy.position.x, puppy.position.y + 1, puppy.position.z);
+
+  // Leaf canopy — update all 30 leaves
+  for (let i = leaves.length - 1; i >= 0; i--) {
+    const l = leaves[i];
+    const d = l.userData;
+
+    l.position.y -= d.fallSpeed;
+    l.position.x += Math.sin(t * d.swaySpeed + d.swayOffset) * 0.025;
+    l.rotation.y += 0.025;
+    l.rotation.z  = Math.sin(t * d.swaySpeed + d.swayOffset) * 0.35;
+
+    // Respawn at top if it hits the ground
+    if (l.position.y < 0) {
+      scene.remove(l);
+      leaves[i] = spawnLeaf(false);
+      continue;
     }
 
-    // Brick collisions
-    for (let i = bricks.length - 1; i >= 0; i--) {
-      const b = bricks[i];
-      const dx = Math.abs(ball.position.x - b.position.x);
-      const dy = Math.abs(ball.position.y - b.position.y);
-      if (dx < BRICK_W / 2 + 0.3 && dy < BRICK_H / 2 + 0.3) {
-        scene.remove(b);
-        bricks.splice(i, 1);
-        // Determine which face was hit for realistic bounce
-        if (dx / (BRICK_W / 2) > dy / (BRICK_H / 2)) ballVel.x *= -1;
-        else ballVel.y *= -1;
-        score += 10;
-        scoreEl.innerText = score;
-        break;
-      }
-    }
-
-    // Win condition
-    if (bricks.length === 0) {
-      won = true;
-      showMessage('You Win!<br><small style="font-size:18px">Press R to play again</small>');
-    }
-
-    // Lose a life / game over
-    if (ball.position.y < -BOARD_H / 2) {
-      lives--;
-      if (lives <= 0) {
-        gameOver = true;
-        showMessage('Game Over<br><small style="font-size:18px">Press R to restart</small>');
-      } else {
-        resetBall();
-      }
+    // Collision
+    const dx = puppy.position.x - l.position.x;
+    const dy = puppy.position.y - l.position.y;
+    const dz = puppy.position.z - l.position.z;
+    if (Math.sqrt(dx * dx + dy * dy + dz * dz) < PUPPY_RADIUS + 0.4) {
+      scene.remove(l);
+      leaves[i] = spawnLeaf(false);
+      score++;
+      scoreEl.innerText = score;
     }
   }
 

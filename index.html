@@ -3,16 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>3D Breakout</title>
+    <title>Leaves and Bark</title>
     <style>
-      body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
-      #hud { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; font-weight: bold; pointer-events: none; }
-      #message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 32px; font-weight: bold; pointer-events: none; text-align: center; display: none; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { overflow: hidden; background: #fffaf0; font-family: 'Georgia', serif; }
+      #hud {
+        position: absolute;
+        top: 16px; left: 20px;
+        color: #1a1a1a;
+        font-size: 20px;
+        font-weight: bold;
+        pointer-events: none;
+        letter-spacing: 0.05em;
+      }
+      #hud span { color: #c1663a; }
     </style>
   </head>
   <body>
-    <div id="hud">Score: <span id="score">0</span></div>
-    <div id="message"></div>
+    <div id="hud">🍂 <span id="score">0</span> leaves</div>
     <div id="app"></div>
     <script type="module" src="/main.js"></script>
   </body>
