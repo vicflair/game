@@ -187,6 +187,41 @@ function removeLeaf(leaf) {
   scene.remove(leaf.userData.shadow);
 }
 
+// --- Ground leaves ---
+const MAX_GROUND_LEAVES = 180;
+const groundLeaves = []; // { mesh, state: 'settled'|'airborne', vx, vy, vz }
+
+function settleLeaf(fallingLeaf) {
+  // Remove shadow, detach from falling pool
+  scene.remove(fallingLeaf.userData.shadow);
+  fallingLeaf.position.y = 0.04;
+  fallingLeaf.rotation.x = -Math.PI / 2;
+  fallingLeaf.rotation.y = Math.random() * Math.PI * 2;
+  fallingLeaf.rotation.z = 0;
+  groundLeaves.push({ mesh: fallingLeaf, state: 'settled', vx: 0, vy: 0, vz: 0 });
+  if (groundLeaves.length > MAX_GROUND_LEAVES) {
+    const oldest = groundLeaves.shift();
+    scene.remove(oldest.mesh);
+  }
+}
+
+function scatterNearby(px, pz) {
+  const SCATTER_RADIUS = 2.2;
+  for (const gl of groundLeaves) {
+    if (gl.state !== 'settled') continue;
+    const dx = px - gl.mesh.position.x;
+    const dz = pz - gl.mesh.position.z;
+    if (dx * dx + dz * dz < SCATTER_RADIUS * SCATTER_RADIUS) {
+      gl.state = 'airborne';
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.04 + Math.random() * 0.07;
+      gl.vx = Math.cos(angle) * speed;
+      gl.vy = 0.07 + Math.random() * 0.09;
+      gl.vz = Math.sin(angle) * speed;
+    }
+  }
+}
+
 const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
 
 // --- Score ---
@@ -353,14 +388,14 @@ function animate() {
     const s = 0.3 + heightRatio * 0.9;
     d.shadow.scale.set(s, s, s);
 
-    // Respawn at top if it hits the ground
+    // Settle on ground instead of removing
     if (l.position.y < 0) {
-      removeLeaf(l);
+      settleLeaf(l);
       leaves[i] = spawnLeaf(false);
       continue;
     }
 
-    // Collision
+    // Collision with puppy — caught!
     const dx = puppy.position.x - l.position.x;
     const dy = puppy.position.y - l.position.y;
     const dz = puppy.position.z - l.position.z;
@@ -369,6 +404,27 @@ function animate() {
       leaves[i] = spawnLeaf(false);
       score++;
       scoreEl.innerText = score;
+    }
+  }
+
+  // Scatter ground leaves when puppy runs through them
+  if (moving || !onGround) scatterNearby(puppy.position.x, puppy.position.z);
+
+  // Update airborne ground leaves
+  for (const gl of groundLeaves) {
+    if (gl.state !== 'airborne') continue;
+    gl.vy -= 0.006;
+    gl.mesh.position.x += gl.vx;
+    gl.mesh.position.y += gl.vy;
+    gl.mesh.position.z += gl.vz;
+    gl.mesh.rotation.y += 0.06;
+    if (gl.mesh.position.y <= 0.04) {
+      gl.mesh.position.y = 0.04;
+      gl.mesh.rotation.x = -Math.PI / 2;
+      gl.mesh.rotation.y = Math.random() * Math.PI * 2;
+      gl.mesh.rotation.z = 0;
+      gl.state = 'settled';
+      gl.vx = 0; gl.vy = 0; gl.vz = 0;
     }
   }
 
