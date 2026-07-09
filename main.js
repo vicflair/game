@@ -190,7 +190,9 @@ function newRoamTarget() {
 
 const npcDogs = NPC_CONFIGS.map(({ body, dark, snout }) => {
   const mesh = createPuppyMesh(body, dark, snout);
-  mesh.position.set((Math.random() - 0.5) * 16, 0.75, (Math.random() - 0.5) * 16);
+  let sx, sz;
+  do { sx = (Math.random() - 0.5) * 16; sz = (Math.random() - 0.5) * 16; } while (inPond(sx, sz));
+  mesh.position.set(sx, 0.75, sz);
   scene.add(mesh);
   return { mesh, target: newRoamTarget(), speed: 0.05 + Math.random() * 0.025, pauseTimer: 0 };
 });
@@ -552,6 +554,11 @@ function animate() {
   }
   puppy.position.x += velX;
   puppy.position.z += velZ;
+  if (inPond(puppy.position.x, puppy.position.z)) {
+    puppy.position.x -= velX;
+    puppy.position.z -= velZ;
+    velX = 0; velZ = 0;
+  }
 
   // Jump — carry current ground velocity into the air
   if ((keys[' '] || touchJump) && onGround) {
