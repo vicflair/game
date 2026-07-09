@@ -18,6 +18,7 @@
   - 0–45s: warm cream sky, normal leaf speed
   - 45–75s: lerp to peach/lavender, wind doubles, leaves speed up, banner "The evening breeze awakens..."
   - 75–90s: deep violet sky, golden leaf rate increases
+- [ ] Investigate migrating to React Three Fiber + @react-three/rapier (or Rapier.js standalone) to replace manual physics and reduce low-level Three.js boilerplate
 - [ ] "Good Day's Rest" end scorecard
   - Physics freeze at 90s, camera pans to puppy
   - Puppy idles, circles 3x, curls up
