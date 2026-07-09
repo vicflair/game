@@ -488,20 +488,16 @@ function initMusic() {
 
   function scheduleLoop(t0) {
     PROGRESSION.forEach((chord, i) => {
-      const t  = t0 + i * CHORD;
-      const v  = chord.voices;
-      const mid = v[1]; // second voice
-      const top = v[v.length - 1];
+      const t = t0 + i * CHORD;
+      const v = chord.voices;
 
-      // Beat 1: bottom (bass)
-      note(chord.bass, t,            BEAT * 0.8, 0.28, 'triangle');
-      // Beat 2: middle note
-      note(mid,        t + BEAT,     BEAT * 0.8, 0.13);
-      // Beat 3: top note
-      note(top,        t + BEAT * 2, BEAT * 0.8, 0.11);
-      // Beat 4: full chord strum
-      note(chord.bass, t + BEAT * 3, BEAT * 0.9, 0.22, 'triangle');
-      v.forEach(freq => note(freq, t + BEAT * 3, BEAT * 0.9, 0.065));
+      // BOOM: bass on beats 1 and 3 (long, warm)
+      note(chord.bass, t,            BEAT * 0.82, 0.30, 'triangle');
+      note(chord.bass, t + BEAT * 2, BEAT * 0.82, 0.25, 'triangle');
+
+      // DOO / WOP: short punchy chord stabs on beats 2 and 4
+      v.forEach(f => note(f, t + BEAT,     BEAT * 0.42, 0.072));
+      v.forEach(f => note(f, t + BEAT * 3, BEAT * 0.42, 0.072));
     });
     // Re-schedule just before loop end
     const ms = (t0 + LOOP - musicCtx.currentTime - 0.6) * 1000;
