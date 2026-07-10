@@ -388,9 +388,6 @@ for (let i = 0; i < 6; i++) {
 
 const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
 
-// --- Score ---
-let score = 0;
-const scoreEl = document.getElementById('score');
 
 // --- Controls ---
 const keys = {};
@@ -631,8 +628,6 @@ function animate() {
     if (Math.sqrt(dx * dx + dy * dy + dz * dz) < PUPPY_RADIUS + 0.4) {
       removeLeaf(l);
       leaves[i] = spawnLeaf(false);
-      score++;
-      scoreEl.innerText = score;
     }
   }
 
