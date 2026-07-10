@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createClient } from '@supabase/supabase-js';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -551,6 +552,106 @@ muteBtn.addEventListener('click', () => {
   muteBtn.textContent = muted ? '♪̶' : '♪';
 });
 
+// --- Multiplayer ---
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = (SUPABASE_URL && SUPABASE_KEY) ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+// Player identity (persisted across sessions)
+const playerId = localStorage.getItem('player_id') || (() => {
+  const id = crypto.randomUUID();
+  localStorage.setItem('player_id', id);
+  return id;
+})();
+let playerName = localStorage.getItem('player_name') || null;
+
+// Name modal
+const nameModal  = document.getElementById('name-modal');
+const nameInput  = document.getElementById('name-input');
+const nameSubmit = document.getElementById('name-submit');
+
+function submitName() {
+  const val = nameInput.value.trim();
+  if (!val) return;
+  playerName = val;
+  localStorage.setItem('player_name', val);
+  nameModal.classList.add('hidden');
+  joinChannel();
+}
+nameSubmit.addEventListener('click', submitName);
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
+
+if (playerName) {
+  nameModal.classList.add('hidden');
+  joinChannel();
+}
+
+// Ghost dogs
+const labelsEl = document.getElementById('labels');
+const ghosts = new Map(); // id → { mesh, tx, tz, try, labelEl }
+
+function createGhostDog() {
+  const mesh = createPuppyMesh(0x99b8d8, 0x6080a0, 0xb8cce0);
+  mesh.traverse(child => {
+    if (child.isMesh) {
+      child.material = child.material.clone();
+      child.material.transparent = true;
+      child.material.opacity = 0.6;
+    }
+  });
+  mesh.position.y = 0.75;
+  return mesh;
+}
+
+function syncGhosts(state) {
+  const active = new Set();
+  for (const [key, presences] of Object.entries(state)) {
+    if (key === playerId) continue;
+    const p = presences[0];
+    active.add(key);
+    if (!ghosts.has(key)) {
+      const mesh = createGhostDog();
+      scene.add(mesh);
+      const labelEl = document.createElement('div');
+      labelEl.className = 'ghost-label';
+      labelEl.textContent = p.name || 'someone';
+      labelsEl.appendChild(labelEl);
+      ghosts.set(key, { mesh, tx: p.x, tz: p.z, try: p.ry, labelEl });
+    } else {
+      const g = ghosts.get(key);
+      g.tx = p.x; g.tz = p.z; g.try = p.ry;
+      g.labelEl.textContent = p.name || 'someone';
+    }
+  }
+  for (const [id, g] of ghosts) {
+    if (!active.has(id)) {
+      scene.remove(g.mesh);
+      g.labelEl.remove();
+      ghosts.delete(id);
+    }
+  }
+}
+
+// Throttled broadcast
+let lastBroadcast = 0;
+let channel = null;
+
+function broadcastPosition() {
+  if (!channel || !playerName) return;
+  const now = Date.now();
+  if (now - lastBroadcast < 333) return;
+  lastBroadcast = now;
+  channel.track({ id: playerId, name: playerName, x: puppy.position.x, z: puppy.position.z, ry: puppy.rotation.y });
+}
+
+function joinChannel() {
+  if (!supabase) return;
+  channel = supabase.channel('leaves-and-bark', { config: { presence: { key: playerId } } });
+  channel
+    .on('presence', { event: 'sync' }, () => syncGhosts(channel.presenceState()))
+    .subscribe();
+}
+
 // --- Game loop ---
 let t = 0;
 const camPos = new THREE.Vector3(0, 8, 16);
@@ -755,6 +856,28 @@ function animate() {
     }
   }
 
+  // Ghost dog LERP + name labels
+  for (const [, g] of ghosts) {
+    g.mesh.position.x += (g.tx - g.mesh.position.x) * 0.15;
+    g.mesh.position.z += (g.tz - g.mesh.position.z) * 0.15;
+    g.mesh.position.y = 0.75;
+    let dRy = g.try - g.mesh.rotation.y;
+    while (dRy >  Math.PI) dRy -= Math.PI * 2;
+    while (dRy < -Math.PI) dRy += Math.PI * 2;
+    g.mesh.rotation.y += dRy * 0.15;
+
+    // Project 3D position to screen for label
+    const wp = g.mesh.position.clone();
+    wp.y += 2.2;
+    wp.project(camera);
+    const sx = ( wp.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-wp.y * 0.5 + 0.5) * window.innerHeight;
+    g.labelEl.style.left    = `${sx}px`;
+    g.labelEl.style.top     = `${sy}px`;
+    g.labelEl.style.display = wp.z < 1 ? 'block' : 'none';
+  }
+
+  broadcastPosition();
   renderer.render(scene, camera);
 }
 
