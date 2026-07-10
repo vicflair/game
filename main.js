@@ -604,6 +604,10 @@ ownLabelEl.className = 'ghost-label';
 ownLabelEl.style.display = 'none';
 labelsEl.appendChild(ownLabelEl);
 
+// Throttled broadcast
+let lastBroadcast = 0;
+let channel = null;
+
 if (playerName) {
   ownLabelEl.textContent = playerName;
   ownLabelEl.style.display = 'block';
@@ -653,10 +657,6 @@ function syncGhosts(state) {
     }
   }
 }
-
-// Throttled broadcast
-let lastBroadcast = 0;
-let channel = null;
 
 function broadcastPosition() {
   if (!channel || !playerName) return;
