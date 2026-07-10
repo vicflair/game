@@ -663,12 +663,21 @@ function broadcastPosition() {
 }
 
 function joinChannel() {
-  if (!supabase) return;
+  if (!supabase) { console.warn('Supabase not initialised'); return; }
   try {
     channel = supabase.channel('leaves-and-bark', { config: { presence: { key: playerId } } });
     channel
-      .on('presence', { event: 'sync' }, () => syncGhosts(channel.presenceState()))
-      .subscribe(status => { if (status === 'CHANNEL_ERROR') console.warn('Realtime error'); });
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        console.log('presence sync', JSON.stringify(state));
+        syncGhosts(state);
+      })
+      .subscribe(status => {
+        console.log('channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          channel.track({ id: playerId, name: playerName, x: puppy.position.x, z: puppy.position.z, ry: puppy.rotation.y });
+        }
+      });
   } catch (e) { console.warn('joinChannel failed:', e); }
 }
 
