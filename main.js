@@ -616,13 +616,6 @@ if (playerName) {
 
 function createGhostDog() {
   const mesh = createPuppyMesh(0x99b8d8, 0x6080a0, 0xb8cce0);
-  mesh.traverse(child => {
-    if (child.isMesh) {
-      child.material = child.material.clone();
-      child.material.transparent = true;
-      child.material.opacity = 0.6;
-    }
-  });
   mesh.position.y = 0.75;
   return mesh;
 }
