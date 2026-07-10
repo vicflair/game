@@ -358,18 +358,17 @@ function scatterNearby(px, pz) {
 }
 
 function spawnPile(cx, cz, count = 40) {
-  const MAX_H = 1.8;
-  const MAX_R = 2.4;
+  const MAX_H = 1.2;
+  const MAX_R = 1.9;
   for (let i = 0; i < count; i++) {
     const leaf = createLeafMesh(false);
-    // Cone distribution: higher leaves packed closer to center
+    // Spiral outward from center — guarantees center is always filled
     const t = i / count;
-    const h = t * MAX_H;
-    const r = MAX_R * (1 - t) * (0.5 + Math.random() * 0.5);
-    const angle = Math.random() * Math.PI * 2;
-    leaf.position.set(cx + Math.cos(angle) * r, h + 0.04, cz + Math.sin(angle) * r);
-    // Flat at base, increasingly tumbled toward peak
-    const tilt = t * 0.6;
+    const r = MAX_R * Math.sqrt(t); // sqrt = uniform area coverage
+    const angle = t * Math.PI * 2 * 8 + (Math.random() - 0.5) * 0.6;
+    const h = MAX_H * (1 - t) + (Math.random() - 0.5) * 0.18;
+    leaf.position.set(cx + Math.cos(angle) * r, Math.max(0.04, h), cz + Math.sin(angle) * r);
+    const tilt = (1 - t) * 0.5;
     leaf.rotation.set(
       (Math.random() - 0.5) * tilt,
       Math.random() * Math.PI * 2,
@@ -384,7 +383,7 @@ function spawnPile(cx, cz, count = 40) {
 for (let i = 0; i < 6; i++) {
   let px, pz;
   do { px = (Math.random() - 0.5) * 38; pz = (Math.random() - 0.5) * 38; } while (inPond(px, pz));
-  spawnPile(px, pz, 65 + Math.floor(Math.random() * 20));
+  spawnPile(px, pz, 90 + Math.floor(Math.random() * 30));
 }
 
 const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
