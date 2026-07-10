@@ -665,7 +665,7 @@ function broadcastPosition() {
 function joinChannel() {
   if (!supabase) { console.warn('Supabase not initialised'); return; }
   try {
-    channel = supabase.channel('leaves-and-bark');
+    channel = supabase.channel('leaves-and-bark', { config: { presence: { key: playerId } } });
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
