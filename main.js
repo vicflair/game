@@ -171,7 +171,20 @@ function createPuppyMesh(bodyColor = 0xc1663a, darkColor = 0x3b1f0e, snoutColor 
   return outer;
 }
 
-const puppy = createPuppyMesh();
+const DOG_PALETTES = [
+  { body: 0xc1663a, dark: 0x3b1f0e, snout: 0xe8906a }, // chestnut
+  { body: 0xe8a030, dark: 0x7a4a10, snout: 0xf0c060 }, // golden
+  { body: 0x2d2d2d, dark: 0x111111, snout: 0x606060 }, // black
+  { body: 0xf0e0c8, dark: 0x5a3a20, snout: 0xffe0b8 }, // cream
+  { body: 0x7a4a2a, dark: 0x2a1808, snout: 0xa06040 }, // chocolate
+  { body: 0xa09090, dark: 0x403838, snout: 0xc8b8b0 }, // silver
+  { body: 0xd4522a, dark: 0x5a1a08, snout: 0xf07050 }, // red setter
+  { body: 0xe8d4a0, dark: 0x6a4a20, snout: 0xf5e8c0 }, // wheaten
+];
+
+const myPaletteIdx = Math.floor(Math.random() * DOG_PALETTES.length);
+const { body: myBody, dark: myDark, snout: mySnout } = DOG_PALETTES[myPaletteIdx];
+const puppy = createPuppyMesh(myBody, myDark, mySnout);
 scene.add(puppy);
 
 // Bounding radius for collision
@@ -614,8 +627,9 @@ if (playerName) {
   nameModal.style.display = 'flex';
 }
 
-function createGhostDog() {
-  const mesh = createPuppyMesh(0x99b8d8, 0x6080a0, 0xb8cce0);
+function createGhostDog(paletteIdx) {
+  const { body, dark, snout } = DOG_PALETTES[paletteIdx ?? Math.floor(Math.random() * DOG_PALETTES.length)];
+  const mesh = createPuppyMesh(body, dark, snout);
   mesh.position.y = 0.75;
   return mesh;
 }
@@ -626,7 +640,7 @@ function updateGhost(p) {
   if (!p || !p.id || p.id === playerId) return;
   const nowMs = Date.now();
   if (!ghosts.has(p.id)) {
-    const mesh = createGhostDog();
+    const mesh = createGhostDog(p.palette);
     mesh.position.set(p.x ?? 0, 0.75, p.z ?? 0);
     scene.add(mesh);
     const labelEl = document.createElement('div');
@@ -649,7 +663,7 @@ function broadcastPosition() {
   channel.send({
     type: 'broadcast',
     event: 'pos',
-    payload: { id: playerId, name: playerName, x: puppy.position.x, z: puppy.position.z, ry: puppy.rotation.y }
+    payload: { id: playerId, name: playerName, x: puppy.position.x, z: puppy.position.z, ry: puppy.rotation.y, palette: myPaletteIdx }
   });
 }
 
