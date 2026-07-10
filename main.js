@@ -564,7 +564,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 let supabase = null;
 try {
-  if (SUPABASE_URL && SUPABASE_KEY) supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  if (SUPABASE_URL && SUPABASE_KEY) supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    realtime: { accessToken: async () => null }
+  });
 } catch (e) { console.warn('Supabase init failed:', e); }
 
 // Fresh session ID per page load (so two tabs = two players)
@@ -592,7 +594,7 @@ nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName()
 
 // Ghost dogs
 const labelsEl = document.getElementById('labels');
-const ghosts = new Map(); // id → { mesh, tx, tz, try, labelEl }
+const ghosts = new Map(); // id → { mesh, tx, tz, try, labelEl, lastSeen }
 
 // Own name label above player's dog
 const ownLabelEl = document.createElement('div');
@@ -625,32 +627,22 @@ function createGhostDog() {
   return mesh;
 }
 
-function syncGhosts(state) {
-  const active = new Set();
-  for (const [key, presences] of Object.entries(state)) {
-    const p = presences[0];
-    if (p.id === playerId) continue; // skip self by payload ID
-    active.add(key);
-    if (!ghosts.has(key)) {
-      const mesh = createGhostDog();
-      scene.add(mesh);
-      const labelEl = document.createElement('div');
-      labelEl.className = 'ghost-label';
-      labelEl.textContent = p.name || 'someone';
-      labelsEl.appendChild(labelEl);
-      ghosts.set(key, { mesh, tx: p.x, tz: p.z, try: p.ry, labelEl });
-    } else {
-      const g = ghosts.get(key);
-      g.tx = p.x; g.tz = p.z; g.try = p.ry;
-      g.labelEl.textContent = p.name || 'someone';
-    }
-  }
-  for (const [id, g] of ghosts) {
-    if (!active.has(id)) {
-      scene.remove(g.mesh);
-      g.labelEl.remove();
-      ghosts.delete(id);
-    }
+function updateGhost(p) {
+  if (!p || !p.id || p.id === playerId) return;
+  if (!ghosts.has(p.id)) {
+    const mesh = createGhostDog();
+    mesh.position.set(p.x ?? 0, 0.75, p.z ?? 0);
+    scene.add(mesh);
+    const labelEl = document.createElement('div');
+    labelEl.className = 'ghost-label';
+    labelEl.textContent = p.name || 'someone';
+    labelsEl.appendChild(labelEl);
+    ghosts.set(p.id, { mesh, tx: p.x ?? 0, tz: p.z ?? 0, try: p.ry ?? 0, labelEl, lastSeen: Date.now() });
+  } else {
+    const g = ghosts.get(p.id);
+    g.tx = p.x ?? g.tx; g.tz = p.z ?? g.tz; g.try = p.ry ?? g.try;
+    g.labelEl.textContent = p.name || 'someone';
+    g.lastSeen = Date.now();
   }
 }
 
@@ -659,23 +651,25 @@ function broadcastPosition() {
   const now = Date.now();
   if (now - lastBroadcast < 333) return;
   lastBroadcast = now;
-  channel.track({ id: playerId, name: playerName, x: puppy.position.x, z: puppy.position.z, ry: puppy.rotation.y });
+  channel.send({
+    type: 'broadcast',
+    event: 'pos',
+    payload: { id: playerId, name: playerName, x: puppy.position.x, z: puppy.position.z, ry: puppy.rotation.y }
+  });
 }
 
-function joinChannel() {
+async function joinChannel() {
   if (!supabase) { console.warn('Supabase not initialised'); return; }
   try {
-    channel = supabase.channel('leaves-and-bark', { config: { presence: { key: playerId } } });
+    channel = supabase.channel('leaves-and-bark-v2');
     channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        console.log('presence sync', JSON.stringify(state));
-        syncGhosts(state);
+      .on('broadcast', { event: 'pos' }, ({ payload }) => {
+        updateGhost(payload);
       })
-      .subscribe(status => {
-        console.log('channel status:', status);
+      .subscribe((status, err) => {
+        console.log('channel status:', status, err ?? '');
         if (status === 'SUBSCRIBED') {
-          channel.track({ id: playerId, name: playerName, x: puppy.position.x, z: puppy.position.z, ry: puppy.rotation.y });
+          broadcastPosition();
         }
       });
   } catch (e) { console.warn('joinChannel failed:', e); }
@@ -885,8 +879,15 @@ function animate() {
     }
   }
 
-  // Ghost dog LERP + name labels
-  for (const [, g] of ghosts) {
+  // Ghost dog LERP + name labels + stale cleanup
+  const nowMs = Date.now();
+  for (const [id, g] of ghosts) {
+    if (nowMs - g.lastSeen > 5000) {
+      scene.remove(g.mesh);
+      g.labelEl.remove();
+      ghosts.delete(id);
+      continue;
+    }
     g.mesh.position.x += (g.tx - g.mesh.position.x) * 0.15;
     g.mesh.position.z += (g.tz - g.mesh.position.z) * 0.15;
     g.mesh.position.y = 0.75;
@@ -895,7 +896,6 @@ function animate() {
     while (dRy < -Math.PI) dRy += Math.PI * 2;
     g.mesh.rotation.y += dRy * 0.15;
 
-    // Project 3D position to screen for label
     const wp = g.mesh.position.clone();
     wp.y += 2.2;
     wp.project(camera);
