@@ -628,8 +628,8 @@ function createGhostDog() {
 function syncGhosts(state) {
   const active = new Set();
   for (const [key, presences] of Object.entries(state)) {
-    if (key === playerId) continue;
     const p = presences[0];
+    if (p.id === playerId) continue; // skip self by payload ID
     active.add(key);
     if (!ghosts.has(key)) {
       const mesh = createGhostDog();
@@ -665,7 +665,7 @@ function broadcastPosition() {
 function joinChannel() {
   if (!supabase) { console.warn('Supabase not initialised'); return; }
   try {
-    channel = supabase.channel('leaves-and-bark', { config: { presence: { key: playerId } } });
+    channel = supabase.channel('leaves-and-bark');
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
