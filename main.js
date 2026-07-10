@@ -587,17 +587,31 @@ function submitName() {
   if (!val) return;
   playerName = val;
   localStorage.setItem('player_name', val);
+  ownLabelEl.textContent = val;
+  ownLabelEl.style.display = 'block';
   hideModal();
   joinChannel();
 }
 nameSubmit.addEventListener('click', submitName);
 nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
 
-if (playerName) { hideModal(); joinChannel(); }
+if (playerName) {
+  ownLabelEl.textContent = playerName;
+  ownLabelEl.style.display = 'block';
+  joinChannel();
+} else {
+  nameModal.style.display = 'flex';
+}
 
 // Ghost dogs
 const labelsEl = document.getElementById('labels');
 const ghosts = new Map(); // id → { mesh, tx, tz, try, labelEl }
+
+// Own name label above player's dog
+const ownLabelEl = document.createElement('div');
+ownLabelEl.className = 'ghost-label';
+ownLabelEl.style.display = 'none';
+labelsEl.appendChild(ownLabelEl);
 
 function createGhostDog() {
   const mesh = createPuppyMesh(0x99b8d8, 0x6080a0, 0xb8cce0);
@@ -886,6 +900,15 @@ function animate() {
     g.labelEl.style.left    = `${sx}px`;
     g.labelEl.style.top     = `${sy}px`;
     g.labelEl.style.display = wp.z < 1 ? 'block' : 'none';
+  }
+
+  // Own name label
+  if (ownLabelEl.style.display !== 'none') {
+    const op = puppy.position.clone();
+    op.y += 2.2;
+    op.project(camera);
+    ownLabelEl.style.left = `${( op.x * 0.5 + 0.5) * window.innerWidth}px`;
+    ownLabelEl.style.top  = `${(-op.y * 0.5 + 0.5) * window.innerHeight}px`;
   }
 
   broadcastPosition();
