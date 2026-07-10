@@ -583,8 +583,7 @@ const nameSubmit = document.getElementById('name-submit');
 function hideModal() { nameModal.style.display = 'none'; }
 
 function submitName() {
-  const val = nameInput.value.trim();
-  if (!val) return;
+  const val = nameInput.value.trim() || 'Pup';
   playerName = val;
   localStorage.setItem('player_name', val);
   ownLabelEl.textContent = val;
@@ -592,7 +591,7 @@ function submitName() {
   hideModal();
   joinChannel();
 }
-nameSubmit.addEventListener('click', submitName);
+nameSubmit.addEventListener('pointerdown', e => { e.preventDefault(); submitName(); });
 nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
 
 if (playerName) {
