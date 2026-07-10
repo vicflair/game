@@ -620,6 +620,8 @@ function createGhostDog() {
   return mesh;
 }
 
+const INTERP_DELAY_MS = 500; // render remote players this far in the past
+
 function updateGhost(p) {
   if (!p || !p.id || p.id === playerId) return;
   const nowMs = Date.now();
@@ -631,18 +633,12 @@ function updateGhost(p) {
     labelEl.className = 'ghost-label';
     labelEl.textContent = p.name || 'someone';
     labelsEl.appendChild(labelEl);
-    ghosts.set(p.id, { mesh, tx: p.x ?? 0, tz: p.z ?? 0, try: p.ry ?? 0, vx: 0, vz: 0, labelEl, lastSeen: nowMs });
-  } else {
-    const g = ghosts.get(p.id);
-    const elapsed = nowMs - g.lastSeen;
-    if (elapsed > 0) {
-      g.vx = ((p.x ?? g.tx) - g.tx) / elapsed;
-      g.vz = ((p.z ?? g.tz) - g.tz) / elapsed;
-    }
-    g.tx = p.x ?? g.tx; g.tz = p.z ?? g.tz; g.try = p.ry ?? g.try;
-    g.labelEl.textContent = p.name || 'someone';
-    g.lastSeen = nowMs;
+    ghosts.set(p.id, { mesh, history: [], labelEl, lastSeen: nowMs });
   }
+  const g = ghosts.get(p.id);
+  g.history.push({ ts: nowMs, x: p.x ?? 0, z: p.z ?? 0, ry: p.ry ?? 0 });
+  g.labelEl.textContent = p.name || 'someone';
+  g.lastSeen = nowMs;
 }
 
 function broadcastPosition() {
@@ -882,9 +878,9 @@ function animate(ts) {
     }
   }
 
-  // Ghost dog LERP + name labels + stale cleanup (framerate-independent LERP)
-  const ghostLerp = 1 - Math.pow(0.85, dt);
+  // Ghost dog interpolation: render at (now - INTERP_DELAY_MS) using buffered history
   const nowMs = Date.now();
+  const renderTime = nowMs - INTERP_DELAY_MS;
   for (const [id, g] of ghosts) {
     if (nowMs - g.lastSeen > 5000) {
       scene.remove(g.mesh);
@@ -892,17 +888,30 @@ function animate(ts) {
       ghosts.delete(id);
       continue;
     }
-    // Dead reckoning: extrapolate where the player should be now based on velocity
-    const timeSince = Math.min(nowMs - g.lastSeen, 400);
-    const extraX = g.tx + g.vx * timeSince;
-    const extraZ = g.tz + g.vz * timeSince;
-    g.mesh.position.x += (extraX - g.mesh.position.x) * ghostLerp;
-    g.mesh.position.z += (extraZ - g.mesh.position.z) * ghostLerp;
+    const hist = g.history;
+    // Prune entries, keeping one before renderTime as the lower bracket
+    while (hist.length > 2 && hist[1].ts <= renderTime) hist.shift();
+    // Need at least two points to interpolate
+    if (hist.length < 2) {
+      if (hist.length === 1) g.mesh.position.set(hist[0].x, 0.75, hist[0].z);
+      continue;
+    }
+    // Find the two entries bracketing renderTime
+    let a = hist[0], b = hist[hist.length - 1];
+    for (let i = 0; i < hist.length - 1; i++) {
+      if (hist[i].ts <= renderTime && hist[i + 1].ts >= renderTime) {
+        a = hist[i]; b = hist[i + 1]; break;
+      }
+    }
+    const span = b.ts - a.ts;
+    const u = span > 0 ? Math.max(0, Math.min(1, (renderTime - a.ts) / span)) : 1;
+    g.mesh.position.x = a.x + (b.x - a.x) * u;
+    g.mesh.position.z = a.z + (b.z - a.z) * u;
     g.mesh.position.y = 0.75;
-    let dRy = g.try - g.mesh.rotation.y;
+    let dRy = b.ry - a.ry;
     while (dRy >  Math.PI) dRy -= Math.PI * 2;
     while (dRy < -Math.PI) dRy += Math.PI * 2;
-    g.mesh.rotation.y += dRy * ghostLerp;
+    g.mesh.rotation.y = a.ry + dRy * u;
 
     const wp = g.mesh.position.clone();
     wp.y += 2.2;
