@@ -357,6 +357,25 @@ function scatterNearby(px, pz) {
   }
 }
 
+function spawnPile(cx, cz, count = 10) {
+  for (let i = 0; i < count; i++) {
+    const leaf = createLeafMesh(false);
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.random() * 1.4;
+    leaf.position.set(cx + Math.cos(angle) * r, 0.04 + i * 0.012, cz + Math.sin(angle) * r);
+    leaf.rotation.set(0, Math.random() * Math.PI * 2, 0);
+    scene.add(leaf);
+    groundLeaves.push({ mesh: leaf, state: 'settled', vx: 0, vy: 0, vz: 0 });
+  }
+}
+
+// Spawn 7 piles scattered around the field at startup
+for (let i = 0; i < 7; i++) {
+  let px, pz;
+  do { px = (Math.random() - 0.5) * 38; pz = (Math.random() - 0.5) * 38; } while (inPond(px, pz));
+  spawnPile(px, pz, 10 + Math.floor(Math.random() * 8));
+}
+
 const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
 
 // --- Score ---
