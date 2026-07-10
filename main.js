@@ -325,7 +325,7 @@ function removeLeaf(leaf) {
 }
 
 // --- Ground leaves ---
-const MAX_GROUND_LEAVES = 180;
+const MAX_GROUND_LEAVES = 600;
 const groundLeaves = []; // { mesh, state: 'settled'|'airborne', vx, vy, vz }
 
 function settleLeaf(fallingLeaf) {
@@ -357,23 +357,34 @@ function scatterNearby(px, pz) {
   }
 }
 
-function spawnPile(cx, cz, count = 10) {
+function spawnPile(cx, cz, count = 40) {
+  const MAX_H = 1.8;
+  const MAX_R = 2.4;
   for (let i = 0; i < count; i++) {
     const leaf = createLeafMesh(false);
+    // Cone distribution: higher leaves packed closer to center
+    const t = i / count;
+    const h = t * MAX_H;
+    const r = MAX_R * (1 - t) * (0.5 + Math.random() * 0.5);
     const angle = Math.random() * Math.PI * 2;
-    const r = Math.random() * 1.4;
-    leaf.position.set(cx + Math.cos(angle) * r, 0.04 + i * 0.012, cz + Math.sin(angle) * r);
-    leaf.rotation.set(0, Math.random() * Math.PI * 2, 0);
+    leaf.position.set(cx + Math.cos(angle) * r, h + 0.04, cz + Math.sin(angle) * r);
+    // Flat at base, increasingly tumbled toward peak
+    const tilt = t * 0.6;
+    leaf.rotation.set(
+      (Math.random() - 0.5) * tilt,
+      Math.random() * Math.PI * 2,
+      (Math.random() - 0.5) * tilt
+    );
     scene.add(leaf);
     groundLeaves.push({ mesh: leaf, state: 'settled', vx: 0, vy: 0, vz: 0 });
   }
 }
 
-// Spawn 7 piles scattered around the field at startup
-for (let i = 0; i < 7; i++) {
+// Spawn 6 piles scattered around the field at startup
+for (let i = 0; i < 6; i++) {
   let px, pz;
   do { px = (Math.random() - 0.5) * 38; pz = (Math.random() - 0.5) * 38; } while (inPond(px, pz));
-  spawnPile(px, pz, 10 + Math.floor(Math.random() * 8));
+  spawnPile(px, pz, 65 + Math.floor(Math.random() * 20));
 }
 
 const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
