@@ -642,7 +642,7 @@ function updateGhost(p) {
 function broadcastPosition() {
   if (!channel || !playerName) return;
   const now = Date.now();
-  if (now - lastBroadcast < 100) return;
+  if (now - lastBroadcast < 333) return;
   lastBroadcast = now;
   channel.send({
     type: 'broadcast',
