@@ -392,8 +392,14 @@ const leaves = Array.from({ length: LEAF_COUNT }, () => spawnLeaf(true));
 
 // --- Controls ---
 const keys = {};
-window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault(); });
-window.addEventListener('keyup',   e => { keys[e.key] = false; });
+window.addEventListener('keydown', e => {
+  if (document.activeElement.tagName === 'INPUT') return;
+  keys[e.key] = true; e.preventDefault();
+});
+window.addEventListener('keyup', e => {
+  if (document.activeElement.tagName === 'INPUT') return;
+  keys[e.key] = false;
+});
 
 // --- Touch / Joystick ---
 const joy = { x: 0, y: 0 }; // normalised -1..1
@@ -539,6 +545,7 @@ function initMusic() {
 // Start on first interaction, toggle with mute button
 function onFirstInteraction() { initMusic(); }
 window.addEventListener('keydown', e => {
+  if (document.activeElement.tagName === 'INPUT') return;
   onFirstInteraction();
   if (e.code === 'Space') { e.preventDefault(); bark(); }
 }, { once: false });
