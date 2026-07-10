@@ -25,7 +25,7 @@ scene.add(sun);
 
 // --- Material helpers ---
 function toonMat(color) {
-  return new THREE.MeshToonMaterial({ color, roughness: 1.0 });
+  return new THREE.MeshToonMaterial({ color });
 }
 
 // Attaches a BackSide black outline as a child of the mesh
@@ -88,7 +88,7 @@ const pondGroup = new THREE.Group();
 // Water surface
 const water = new THREE.Mesh(
   new THREE.CircleGeometry(1, 48),
-  new THREE.MeshToonMaterial({ color: 0x5b9bd5, roughness: 1.0 })
+  new THREE.MeshToonMaterial({ color: 0x5b9bd5 })
 );
 water.rotation.x = -Math.PI / 2;
 water.scale.set(POND.rx, POND.rz, 1);
@@ -106,7 +106,7 @@ scene.add(water);
 [[0, 1.2], [2.0, -0.8], [-1.8, 1.2], [-0.5, -1.2], [1.5, 1.5]].forEach(([lx, lz]) => {
   const pad = new THREE.Mesh(
     new THREE.CircleGeometry(0.35, 8),
-    new THREE.MeshToonMaterial({ color: 0x6aaa50, roughness: 1.0 })
+    new THREE.MeshToonMaterial({ color: 0x6aaa50 })
   );
   pad.rotation.x = -Math.PI / 2;
   pad.position.set(POND.x + lx, 0.05, POND.z + lz);
@@ -594,14 +594,6 @@ function submitName() {
 nameSubmit.addEventListener('pointerdown', e => { e.preventDefault(); submitName(); });
 nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
 
-if (playerName) {
-  ownLabelEl.textContent = playerName;
-  ownLabelEl.style.display = 'block';
-  joinChannel();
-} else {
-  nameModal.style.display = 'flex';
-}
-
 // Ghost dogs
 const labelsEl = document.getElementById('labels');
 const ghosts = new Map(); // id → { mesh, tx, tz, try, labelEl }
@@ -611,6 +603,14 @@ const ownLabelEl = document.createElement('div');
 ownLabelEl.className = 'ghost-label';
 ownLabelEl.style.display = 'none';
 labelsEl.appendChild(ownLabelEl);
+
+if (playerName) {
+  ownLabelEl.textContent = playerName;
+  ownLabelEl.style.display = 'block';
+  joinChannel();
+} else {
+  nameModal.style.display = 'flex';
+}
 
 function createGhostDog() {
   const mesh = createPuppyMesh(0x99b8d8, 0x6080a0, 0xb8cce0);
