@@ -649,7 +649,7 @@ function updateGhost(p) {
 function broadcastPosition() {
   if (!channel || !playerName) return;
   const now = Date.now();
-  if (now - lastBroadcast < 333) return;
+  if (now - lastBroadcast < 100) return;
   lastBroadcast = now;
   channel.send({
     type: 'broadcast',
@@ -677,23 +677,27 @@ async function joinChannel() {
 
 // --- Game loop ---
 let t = 0;
+let lastTs = 0;
 const camPos = new THREE.Vector3(0, 8, 16);
 
-function animate() {
+function animate(ts) {
   requestAnimationFrame(animate);
-  t += 0.016;
+  // dt = 1.0 at 60 fps; cap at 3 to prevent huge jumps after tab switch
+  const dt = lastTs ? Math.min((ts - lastTs) / 16.667, 3) : 1;
+  lastTs = ts;
+  t += 0.016 * dt;
 
   // Rotation
-  if (keys['ArrowLeft']  || keys['a'] || joy.x < -0.25) puppy.rotation.y += ROT_SPEED;
-  if (keys['ArrowRight'] || keys['d'] || joy.x >  0.25) puppy.rotation.y -= ROT_SPEED;
+  if (keys['ArrowLeft']  || keys['a'] || joy.x < -0.25) puppy.rotation.y += ROT_SPEED * dt;
+  if (keys['ArrowRight'] || keys['d'] || joy.x >  0.25) puppy.rotation.y -= ROT_SPEED * dt;
 
   // Forward / back
   const moving = keys['ArrowUp'] || keys['w'] || keys['ArrowDown'] || keys['s'] || Math.abs(joy.y) > 0.25;
   velX = 0; velZ = 0;
   const fwd = (keys['ArrowUp']   || keys['w']) ? 1 : (joy.y < -0.25 ? -joy.y : 0);
   const bwd = (keys['ArrowDown'] || keys['s']) ? 1 : (joy.y >  0.25 ?  joy.y : 0);
-  if (fwd) { velX = -Math.sin(puppy.rotation.y) * MOVE_SPEED * fwd; velZ = -Math.cos(puppy.rotation.y) * MOVE_SPEED * fwd; }
-  if (bwd) { velX =  Math.sin(puppy.rotation.y) * MOVE_SPEED * bwd; velZ =  Math.cos(puppy.rotation.y) * MOVE_SPEED * bwd; }
+  if (fwd) { velX = -Math.sin(puppy.rotation.y) * MOVE_SPEED * fwd * dt; velZ = -Math.cos(puppy.rotation.y) * MOVE_SPEED * fwd * dt; }
+  if (bwd) { velX =  Math.sin(puppy.rotation.y) * MOVE_SPEED * bwd * dt; velZ =  Math.cos(puppy.rotation.y) * MOVE_SPEED * bwd * dt; }
   puppy.position.x += velX;
   puppy.position.z += velZ;
   if (inPond(puppy.position.x, puppy.position.z)) {
@@ -707,16 +711,16 @@ function animate() {
     const b = 1 + Math.sin(t * 12) * 0.07;
     puppy.scale.set(b, 1 / b, b);
   } else {
-    puppy.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
+    puppy.scale.lerp(new THREE.Vector3(1, 1, 1), Math.min(0.2 * dt, 1));
   }
 
-  // Camera — follow behind puppy
+  // Camera — follow behind puppy (framerate-independent LERP)
   const behind = new THREE.Vector3(
     puppy.position.x + Math.sin(puppy.rotation.y) * 11,
     puppy.position.y + 7,
     puppy.position.z + Math.cos(puppy.rotation.y) * 11
   );
-  camPos.lerp(behind, 0.07);
+  camPos.lerp(behind, 1 - Math.pow(0.93, dt));
   camera.position.copy(camPos);
   camera.lookAt(puppy.position.x, puppy.position.y + 1, puppy.position.z);
 
@@ -725,9 +729,9 @@ function animate() {
     const l = leaves[i];
     const d = l.userData;
 
-    l.position.y -= d.fallSpeed;
-    l.position.x += Math.sin(t * d.swaySpeed + d.swayOffset) * 0.025;
-    l.rotation.y += 0.025;
+    l.position.y -= d.fallSpeed * dt;
+    l.position.x += Math.sin(t * d.swaySpeed + d.swayOffset) * 0.025 * dt;
+    l.rotation.y += 0.025 * dt;
     l.rotation.z  = Math.sin(t * d.swaySpeed + d.swayOffset) * 0.35;
 
     // Shadow blob — tracks XZ of leaf, fades + shrinks with height
@@ -761,11 +765,11 @@ function animate() {
   // Update airborne ground leaves
   for (const gl of groundLeaves) {
     if (gl.state !== 'airborne') continue;
-    gl.vy -= 0.006;
-    gl.mesh.position.x += gl.vx;
-    gl.mesh.position.y += gl.vy;
-    gl.mesh.position.z += gl.vz;
-    gl.mesh.rotation.y += 0.06;
+    gl.vy -= 0.006 * dt;
+    gl.mesh.position.x += gl.vx * dt;
+    gl.mesh.position.y += gl.vy * dt;
+    gl.mesh.position.z += gl.vz * dt;
+    gl.mesh.rotation.y += 0.06 * dt;
     if (gl.mesh.position.y <= 0.04) {
       gl.mesh.position.y = 0.04;
       gl.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0);
@@ -787,7 +791,7 @@ function animate() {
         sq.target = { x: tree.x, z: tree.z };
       } else {
         // Wander slowly
-        if (sq.pauseTimer > 0) { sq.pauseTimer -= 0.016; continue; }
+        if (sq.pauseTimer > 0) { sq.pauseTimer -= 0.016 * dt; continue; }
         const dx = sq.target.x - mx, dz = sq.target.z - mz;
         const dist = Math.hypot(dx, dz);
         if (dist < 0.5) {
@@ -798,9 +802,9 @@ function animate() {
           let diff = angle - sq.mesh.rotation.y;
           while (diff >  Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
-          sq.mesh.rotation.y += diff * 0.1;
-          const sx = sq.mesh.position.x + (dx / dist) * 0.04;
-          const sz = sq.mesh.position.z + (dz / dist) * 0.04;
+          sq.mesh.rotation.y += diff * 0.1 * dt;
+          const sx = sq.mesh.position.x + (dx / dist) * 0.04 * dt;
+          const sz = sq.mesh.position.z + (dz / dist) * 0.04 * dt;
           if (inPond(sx, sz)) { sq.target = randomFieldPos(); } else {
             sq.mesh.position.x = sx; sq.mesh.position.z = sz;
           }
@@ -819,16 +823,16 @@ function animate() {
         let diff = angle - sq.mesh.rotation.y;
         while (diff >  Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
-        sq.mesh.rotation.y += diff * 0.15;
-        sq.mesh.position.x += (dx / dist) * 0.18;
-        sq.mesh.position.z += (dz / dist) * 0.18;
+        sq.mesh.rotation.y += diff * 0.15 * dt;
+        sq.mesh.position.x += (dx / dist) * 0.18 * dt;
+        sq.mesh.position.z += (dz / dist) * 0.18 * dt;
         const b = 1 + Math.sin(t * 20) * 0.08;
         sq.mesh.scale.set(b, 1 / b, b);
       }
 
     } else if (sq.state === 'climbing') {
       // Shrink into the tree
-      sq.mesh.scale.lerp(new THREE.Vector3(0.01, 0.01, 0.01), 0.1);
+      sq.mesh.scale.lerp(new THREE.Vector3(0.01, 0.01, 0.01), Math.min(0.1 * dt, 1));
       if (sq.mesh.scale.x < 0.05) {
         sq.state = 'hiding';
         sq.hideTimer = 4 + Math.random() * 4;
@@ -836,7 +840,7 @@ function animate() {
       }
 
     } else if (sq.state === 'hiding') {
-      sq.hideTimer -= 0.016;
+      sq.hideTimer -= 0.016 * dt;
       if (sq.hideTimer <= 0) {
         const pos = randomFieldPos();
         sq.mesh.position.set(pos.x, 0.3, pos.z);
@@ -850,8 +854,8 @@ function animate() {
   // NPC dogs — simple roam AI
   for (const npc of npcDogs) {
     if (npc.pauseTimer > 0) {
-      npc.pauseTimer -= 0.016;
-      npc.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.15);
+      npc.pauseTimer -= 0.016 * dt;
+      npc.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), Math.min(0.15 * dt, 1));
       continue;
     }
     const dx = npc.target.x - npc.mesh.position.x;
@@ -866,10 +870,10 @@ function animate() {
       let diff = targetAngle - npc.mesh.rotation.y;
       while (diff >  Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      npc.mesh.rotation.y += diff * 0.07;
+      npc.mesh.rotation.y += diff * 0.07 * dt;
       // move — reroute if heading into pond
-      const nx = npc.mesh.position.x + (dx / dist) * npc.speed;
-      const nz = npc.mesh.position.z + (dz / dist) * npc.speed;
+      const nx = npc.mesh.position.x + (dx / dist) * npc.speed * dt;
+      const nz = npc.mesh.position.z + (dz / dist) * npc.speed * dt;
       if (inPond(nx, nz)) { npc.target = newRoamTarget(); } else {
         npc.mesh.position.x = nx; npc.mesh.position.z = nz;
       }
@@ -879,7 +883,8 @@ function animate() {
     }
   }
 
-  // Ghost dog LERP + name labels + stale cleanup
+  // Ghost dog LERP + name labels + stale cleanup (framerate-independent LERP)
+  const ghostLerp = 1 - Math.pow(0.85, dt);
   const nowMs = Date.now();
   for (const [id, g] of ghosts) {
     if (nowMs - g.lastSeen > 5000) {
@@ -888,13 +893,13 @@ function animate() {
       ghosts.delete(id);
       continue;
     }
-    g.mesh.position.x += (g.tx - g.mesh.position.x) * 0.15;
-    g.mesh.position.z += (g.tz - g.mesh.position.z) * 0.15;
+    g.mesh.position.x += (g.tx - g.mesh.position.x) * ghostLerp;
+    g.mesh.position.z += (g.tz - g.mesh.position.z) * ghostLerp;
     g.mesh.position.y = 0.75;
     let dRy = g.try - g.mesh.rotation.y;
     while (dRy >  Math.PI) dRy -= Math.PI * 2;
     while (dRy < -Math.PI) dRy += Math.PI * 2;
-    g.mesh.rotation.y += dRy * 0.15;
+    g.mesh.rotation.y += dRy * ghostLerp;
 
     const wp = g.mesh.position.clone();
     wp.y += 2.2;
