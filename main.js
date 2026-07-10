@@ -567,12 +567,8 @@ try {
   if (SUPABASE_URL && SUPABASE_KEY) supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 } catch (e) { console.warn('Supabase init failed:', e); }
 
-// Player identity (persisted across sessions)
-const playerId = localStorage.getItem('player_id') || (() => {
-  const id = crypto.randomUUID();
-  localStorage.setItem('player_id', id);
-  return id;
-})();
+// Fresh session ID per page load (so two tabs = two players)
+const playerId = crypto.randomUUID();
 let playerName = localStorage.getItem('player_name') || null;
 
 // Name modal
