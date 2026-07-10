@@ -622,6 +622,7 @@ function createGhostDog() {
 
 function updateGhost(p) {
   if (!p || !p.id || p.id === playerId) return;
+  const nowMs = Date.now();
   if (!ghosts.has(p.id)) {
     const mesh = createGhostDog();
     mesh.position.set(p.x ?? 0, 0.75, p.z ?? 0);
@@ -630,12 +631,17 @@ function updateGhost(p) {
     labelEl.className = 'ghost-label';
     labelEl.textContent = p.name || 'someone';
     labelsEl.appendChild(labelEl);
-    ghosts.set(p.id, { mesh, tx: p.x ?? 0, tz: p.z ?? 0, try: p.ry ?? 0, labelEl, lastSeen: Date.now() });
+    ghosts.set(p.id, { mesh, tx: p.x ?? 0, tz: p.z ?? 0, try: p.ry ?? 0, vx: 0, vz: 0, labelEl, lastSeen: nowMs });
   } else {
     const g = ghosts.get(p.id);
+    const elapsed = nowMs - g.lastSeen;
+    if (elapsed > 0) {
+      g.vx = ((p.x ?? g.tx) - g.tx) / elapsed;
+      g.vz = ((p.z ?? g.tz) - g.tz) / elapsed;
+    }
     g.tx = p.x ?? g.tx; g.tz = p.z ?? g.tz; g.try = p.ry ?? g.try;
     g.labelEl.textContent = p.name || 'someone';
-    g.lastSeen = Date.now();
+    g.lastSeen = nowMs;
   }
 }
 
@@ -886,8 +892,12 @@ function animate(ts) {
       ghosts.delete(id);
       continue;
     }
-    g.mesh.position.x += (g.tx - g.mesh.position.x) * ghostLerp;
-    g.mesh.position.z += (g.tz - g.mesh.position.z) * ghostLerp;
+    // Dead reckoning: extrapolate where the player should be now based on velocity
+    const timeSince = Math.min(nowMs - g.lastSeen, 400);
+    const extraX = g.tx + g.vx * timeSince;
+    const extraZ = g.tz + g.vz * timeSince;
+    g.mesh.position.x += (extraX - g.mesh.position.x) * ghostLerp;
+    g.mesh.position.z += (extraZ - g.mesh.position.z) * ghostLerp;
     g.mesh.position.y = 0.75;
     let dRy = g.try - g.mesh.rotation.y;
     while (dRy >  Math.PI) dRy -= Math.PI * 2;
