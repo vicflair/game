@@ -562,7 +562,10 @@ muteBtn.addEventListener('click', () => {
 // --- Multiplayer ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = (SUPABASE_URL && SUPABASE_KEY) ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+let supabase = null;
+try {
+  if (SUPABASE_URL && SUPABASE_KEY) supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+} catch (e) { console.warn('Supabase init failed:', e); }
 
 // Player identity (persisted across sessions)
 const playerId = localStorage.getItem('player_id') || (() => {
@@ -577,21 +580,20 @@ const nameModal  = document.getElementById('name-modal');
 const nameInput  = document.getElementById('name-input');
 const nameSubmit = document.getElementById('name-submit');
 
+function hideModal() { nameModal.style.display = 'none'; }
+
 function submitName() {
   const val = nameInput.value.trim();
   if (!val) return;
   playerName = val;
   localStorage.setItem('player_name', val);
-  nameModal.classList.add('hidden');
+  hideModal();
   joinChannel();
 }
 nameSubmit.addEventListener('click', submitName);
 nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
 
-if (playerName) {
-  nameModal.classList.add('hidden');
-  joinChannel();
-}
+if (playerName) { hideModal(); joinChannel(); }
 
 // Ghost dogs
 const labelsEl = document.getElementById('labels');
@@ -653,10 +655,12 @@ function broadcastPosition() {
 
 function joinChannel() {
   if (!supabase) return;
-  channel = supabase.channel('leaves-and-bark', { config: { presence: { key: playerId } } });
-  channel
-    .on('presence', { event: 'sync' }, () => syncGhosts(channel.presenceState()))
-    .subscribe();
+  try {
+    channel = supabase.channel('leaves-and-bark', { config: { presence: { key: playerId } } });
+    channel
+      .on('presence', { event: 'sync' }, () => syncGhosts(channel.presenceState()))
+      .subscribe(status => { if (status === 'CHANNEL_ERROR') console.warn('Realtime error'); });
+  } catch (e) { console.warn('joinChannel failed:', e); }
 }
 
 // --- Game loop ---
